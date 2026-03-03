@@ -21,7 +21,7 @@ static int32_t findEventCodeIdAndOwner(DataWin* dataWin, int32_t objectIndex, in
 
         if (OBJT_EVENT_TYPE_COUNT > eventType) {
             ObjectEventList* eventList = &obj->eventLists[eventType];
-            for (uint32_t i = 0; eventList->eventCount > i; i++) {
+            repeat(eventList->eventCount, i) {
                 ObjectEvent* evt = &eventList->events[i];
                 if ((int32_t) evt->eventSubtype == eventSubtype) {
                     // Found it - return the first action's codeId
@@ -106,7 +106,7 @@ void Runner_executeEvent(Runner* runner, Instance* instance, int32_t eventType, 
 void Runner_executeEventForAll(Runner* runner, int32_t eventType, int32_t eventSubtype) {
     // Iterate over a snapshot of the current instance count to avoid issues if instances are added
     int32_t count = (int32_t) arrlen(runner->instances);
-    for (int32_t i = 0; count > i; i++) {
+    repeat(count, i) {
         Instance* inst = runner->instances[i];
         if (inst != nullptr && inst->active) {
             Runner_executeEvent(runner, inst, eventType, eventSubtype);
@@ -136,7 +136,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
     // Handle persistent instances: keep persistent ones, free non-persistent
     Instance** keptInstances = nullptr;
     int32_t oldCount = (int32_t) arrlen(runner->instances);
-    for (int32_t i = 0; oldCount > i; i++) {
+    repeat(oldCount, i) {
         Instance* inst = runner->instances[i];
         if (inst != nullptr && inst->persistent) {
             arrput(keptInstances, inst);
@@ -157,7 +157,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
 
         // Check if a persistent instance with this ID already exists
         bool alreadyExists = false;
-        for (int32_t j = 0; (int32_t) arrlen(runner->instances) > j; j++) {
+        repeat(arrlen(runner->instances), j) {
             if (runner->instances[j] != nullptr && runner->instances[j]->instanceId == roomObj->instanceID) {
                 alreadyExists = true;
                 break;
@@ -356,7 +356,7 @@ void Runner_free(Runner* runner) {
     if (runner == nullptr) return;
 
     // Free all instances
-    for (int32_t i = 0; (int32_t) arrlen(runner->instances) > i; i++) {
+    repeat(arrlen(runner->instances), i) {
         Instance_free(runner->instances[i]);
     }
     arrfree(runner->instances);
