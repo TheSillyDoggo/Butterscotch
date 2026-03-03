@@ -69,6 +69,24 @@ static DsMapEntry** dsMapGet(int32_t id) {
 
 // ===[ BUILT-IN VARIABLE GET/SET ]===
 
+/**
+ * Gets the argument number from the name
+ *
+ * If it returns -1, then the name is not an argument variable
+ *
+ * @param name The name
+ * @return The argument number, -1 if it is not an argument variable
+ */
+static int extractArgumentNumber(const char* name) {
+    if (strncmp(name, "argument", 8) == 0) {
+        char* end;
+        long argNumber = strtol(name + 8, &end, 10);
+        if (end == name + 8 || *end != '\0' || 0 > argNumber || argNumber > 15) return -1;
+        return (int) argNumber;
+    }
+    return -1;
+}
+
 RValue VMBuiltins_getVariable(VMContext* ctx, const char* name, int32_t arrayIndex) {
     Instance* inst = (Instance*) ctx->currentInstance;
     Runner* runner = (Runner*) ctx->runner;
@@ -125,7 +143,8 @@ RValue VMBuiltins_getVariable(VMContext* ctx, const char* name, int32_t arrayInd
 
     // Argument variables (argument0..argument15 are treated as built-in in GMS bytecode)
     // Look up the argument's local variable index from CodeLocals
-    if (strncmp(name, "argument", 8) == 0 && name[8] >= '0' && name[8] <= '9') {
+    const int argNumber = extractArgumentNumber(name);
+    if (argNumber != -1) {
         // Find current code's CodeLocals to map argument name to local varID
         const char* codeName = ctx->currentCodeName;
         if (codeName != nullptr) {
@@ -194,7 +213,8 @@ void VMBuiltins_setVariable(VMContext* ctx, const char* name, RValue val, int32_
     }
 
     // Argument variables
-    if (strncmp(name, "argument", 8) == 0 && name[8] >= '0' && name[8] <= '9') {
+    const int argNumber = extractArgumentNumber(name);
+    if (argNumber != -1) {
         const char* codeName = ctx->currentCodeName;
         if (codeName != nullptr) {
             forEach(CodeLocals, cl, ctx->dataWin->func.codeLocals, ctx->dataWin->func.codeLocalsCount) {
