@@ -951,114 +951,15 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
     }
 
     int32_t codeIndex = ctx->funcMap[mapIdx].value;
-    CodeEntry* code = &ctx->dataWin->code.entries[codeIndex];
+    RValue result = VM_callCodeIndex(ctx, codeIndex, args, argCount);
 
-    // Save current frame
-    CallFrame* frame = malloc(sizeof(CallFrame));
-    frame->savedIP = ctx->ip;
-    frame->savedCodeEnd = ctx->codeEnd;
-    frame->savedBytecodeBase = ctx->bytecodeBase;
-    frame->savedLocals = ctx->localVars;
-    frame->savedLocalsCount = ctx->localVarCount;
-    frame->savedCodeName = ctx->currentCodeName;
-    frame->savedLocalArrayMap = ctx->localArrayMap;
-    frame->parent = ctx->callStack;
-    ctx->callStack = frame;
-    ctx->callDepth++;
-    ctx->localArrayMap = nullptr;
-
-    // Set up callee
-    ctx->bytecodeBase = ctx->dataWin->fileBuffer + code->bytecodeAbsoluteOffset;
-    ctx->ip = 0;
-    ctx->codeEnd = code->length;
-    ctx->currentCodeName = code->name;
-
-    uint32_t localsCount = code->localsCount;
-    if ((uint32_t) argCount > localsCount) localsCount = (uint32_t) argCount;
-    ctx->localVars = calloc(localsCount, sizeof(RValue));
-    ctx->localVarCount = localsCount;
-
-    // Initialize all locals to RVALUE_UNDEFINED
-    repeat(localsCount, i) {
-        ctx->localVars[i].type = RVALUE_UNDEFINED;
-    }
-
-    // Copy arguments into the first N local slots via their varIDs
-    // In GMS, arguments map to the 'argument0'..'argumentN' variables which have specific varIDs.
-    // For simplicity, we look up argument variable indices from the code locals.
-    // The arguments are stored with names like "arguments" or "argument0"..."argument15".
-    // However, in GMS 1.4 bytecode, argument values are typically accessed as local variables.
-    // The callee's code will use PushLoc with the argument variable IDs to read them.
-    // We need to figure out which varIDs correspond to argument0..argumentN.
-    // The CodeLocals for this function lists all locals including arguments.
-    // Let's find the code locals entry and map argument names to varIDs.
-
-    // Find the CodeLocals for this code entry
-    CodeLocals* codeLocals = nullptr;
-    forEach(CodeLocals, cl, ctx->dataWin->func.codeLocals, ctx->dataWin->func.codeLocalsCount) {
-        if (strcmp(cl->name, code->name) == 0) {
-            codeLocals = cl;
-            break;
-        }
-    }
-
-    if (codeLocals != nullptr && args != nullptr) {
-        repeat(argCount, argIdx) {
-            // Build expected argument name
-            char argName[32];
-            snprintf(argName, sizeof(argName), "argument%d", argIdx);
-
-            // Find the local variable with this name
-            forEach(LocalVar, local, codeLocals->locals, codeLocals->localVarCount) {
-                if (strcmp(local->name, argName) == 0) {
-                    uint32_t varID = local->index;
-                    if (localsCount > varID) {
-                        ctx->localVars[varID] = args[argIdx];
-                        // Clear ownsString on the arg so we don't double-free
-                        args[argIdx].ownsString = false;
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    // Free the args array (values were moved into locals)
+    // Free arguments (VM_callCodeIndex copies what it needs)
     if (args != nullptr) {
         repeat(argCount, i) {
             RValue_free(&args[i]);
         }
         free(args);
     }
-
-    // Execute the callee
-    RValue result = executeLoop(ctx);
-
-    // Restore caller frame
-    CallFrame* saved = ctx->callStack;
-    ctx->ip = saved->savedIP;
-    ctx->codeEnd = saved->savedCodeEnd;
-    ctx->bytecodeBase = saved->savedBytecodeBase;
-
-    // Free callee locals
-    repeat(ctx->localVarCount, i) {
-        RValue_free(&ctx->localVars[i]);
-    }
-    free(ctx->localVars);
-
-    // Free callee local array map
-    for (ptrdiff_t i = 0; hmlen(ctx->localArrayMap) > i; i++) {
-        RValue_free(&ctx->localArrayMap[i].value);
-    }
-    hmfree(ctx->localArrayMap);
-
-    ctx->localVars = saved->savedLocals;
-    ctx->localVarCount = saved->savedLocalsCount;
-    ctx->localArrayMap = saved->savedLocalArrayMap;
-    ctx->currentCodeName = saved->savedCodeName;
-    ctx->callStack = saved->parent;
-    ctx->callDepth--;
-    free(saved);
 
     // Push return value
     stackPush(&ctx->stack, result);
@@ -1347,6 +1248,16 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     repeat(localsCount, i) {
         ctx->localVars[i].type = RVALUE_UNDEFINED;
     }
+
+    // Copy arguments into the first N local slots via their varIDs
+    // In GMS, arguments map to the 'argument0'..'argumentN' variables which have specific varIDs.
+    // For simplicity, we look up argument variable indices from the code locals.
+    // The arguments are stored with names like "arguments" or "argument0"..."argument15".
+    // However, in GMS 1.4 bytecode, argument values are typically accessed as local variables.
+    // The callee's code will use PushLoc with the argument variable IDs to read them.
+    // We need to figure out which varIDs correspond to argument0..argumentN.
+    // The CodeLocals for this function lists all locals including arguments.
+    // Let's find the code locals entry and map argument names to varIDs.
 
     // Find CodeLocals to map argument names to varIDs
     CodeLocals* codeLocals = nullptr;
