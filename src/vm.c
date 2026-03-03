@@ -1277,6 +1277,8 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     frame->savedLocalsCount = ctx->localVarCount;
     frame->savedCodeName = ctx->currentCodeName;
     frame->savedLocalArrayMap = ctx->localArrayMap;
+    frame->savedScriptArgs = ctx->scriptArgs;
+    frame->savedScriptArgCount = ctx->scriptArgCount;
     frame->parent = ctx->callStack;
     ctx->callStack = frame;
     ctx->callDepth++;
@@ -1289,7 +1291,6 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     ctx->localArrayMap = nullptr;
 
     uint32_t localsCount = code->localsCount;
-    if ((uint32_t) argCount > localsCount) localsCount = (uint32_t) argCount;
     if (localsCount == 0) localsCount = 1;
     ctx->localVars = calloc(localsCount, sizeof(RValue));
     ctx->localVarCount = localsCount;
@@ -1297,39 +1298,19 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
         ctx->localVars[i].type = RVALUE_UNDEFINED;
     }
 
-    // Copy arguments into the first N local slots via their varIDs
-    // In GMS, arguments map to the 'argument0'..'argumentN' variables which have specific varIDs.
-    // For simplicity, we look up argument variable indices from the code locals.
-    // The arguments are stored with names like "arguments" or "argument0"..."argument15".
-    // However, in GMS 1.4 bytecode, argument values are typically accessed as local variables.
-    // The callee's code will use PushLoc with the argument variable IDs to read them.
-    // We need to figure out which varIDs correspond to argument0..argumentN.
-    // The CodeLocals for this function lists all locals including arguments.
-    // Let's find the code locals entry and map argument names to varIDs.
-
-    // Find CodeLocals to map argument names to varIDs
-    CodeLocals* codeLocals = VM_resolveCodeLocals(ctx, code->name);
-    if (codeLocals != nullptr && args != nullptr) {
+    // Store arguments in scriptArgs (mirrors GMS 1.4's global argument stack)
+    ctx->scriptArgCount = argCount;
+    if (argCount > 0 && args != nullptr) {
+        ctx->scriptArgs = malloc((uint32_t) argCount * sizeof(RValue));
         repeat(argCount, argIdx) {
-            char argName[32];
-            snprintf(argName, sizeof(argName), "argument%d", argIdx);
-            forEach(LocalVar, local, codeLocals->locals, codeLocals->localVarCount) {
-                if (strcmp(local->name, argName) == 0) {
-                    uint32_t varID = local->index;
-                    if (localsCount > varID) {
-                        // Copy the arg value (duplicate owned strings)
-                        RValue argCopy = args[argIdx];
-                        if (argCopy.type == RVALUE_STRING && argCopy.ownsString && argCopy.string != nullptr) {
-                            argCopy.string = strdup(argCopy.string);
-                        } else if (argCopy.type == RVALUE_STRING && !argCopy.ownsString) {
-                            // Make a non-owning copy (fine, original stays valid)
-                        }
-                        ctx->localVars[varID] = argCopy;
-                    }
-                    break;
-                }
+            RValue argCopy = args[argIdx];
+            if (argCopy.type == RVALUE_STRING && argCopy.ownsString && argCopy.string != nullptr) {
+                argCopy.string = strdup(argCopy.string);
             }
+            ctx->scriptArgs[argIdx] = argCopy;
         }
+    } else {
+        ctx->scriptArgs = nullptr;
     }
 
     // Execute the callee
@@ -1351,9 +1332,17 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     RValue_freeAllRValuesInMap(ctx->localArrayMap);
     hmfree(ctx->localArrayMap);
 
+    // Free callee script args
+    repeat(ctx->scriptArgCount, i) {
+        RValue_free(&ctx->scriptArgs[i]);
+    }
+    free(ctx->scriptArgs);
+
     ctx->localVars = saved->savedLocals;
     ctx->localVarCount = saved->savedLocalsCount;
     ctx->localArrayMap = saved->savedLocalArrayMap;
+    ctx->scriptArgs = saved->savedScriptArgs;
+    ctx->scriptArgCount = saved->savedScriptArgCount;
     ctx->currentCodeName = saved->savedCodeName;
     ctx->callStack = saved->parent;
     ctx->callDepth--;

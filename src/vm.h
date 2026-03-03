@@ -82,6 +82,8 @@ typedef struct CallFrame {
     uint32_t savedLocalsCount;
     const char* savedCodeName;
     ArrayMapEntry* savedLocalArrayMap;
+    RValue* savedScriptArgs;
+    int32_t savedScriptArgCount;
     struct CallFrame* parent;
 } CallFrame;
 
@@ -119,6 +121,8 @@ typedef struct VMContext {
     // Array variable maps: key = ((int64_t)varID << 32) | (uint32_t)arrayIndex
     ArrayMapEntry* globalArrayMap;
     ArrayMapEntry* localArrayMap;
+    RValue* scriptArgs;       // Arguments passed to current script (nullptr for non-script code)
+    int32_t scriptArgCount;   // Number of arguments passed
     // funcName -> codeIndex hash map (stb_ds)
     struct { char* key; int32_t value; }* funcMap;
     // varName -> varID hash map for global variables (stb_ds)

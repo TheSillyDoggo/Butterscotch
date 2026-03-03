@@ -146,27 +146,26 @@ RValue VMBuiltins_getVariable(VMContext* ctx, const char* name, int32_t arrayInd
         return RValue_makeReal(ms);
     }
 
-    // Argument variables (argument0..argument15 are treated as built-in in GMS bytecode)
-    // Look up the argument's local variable index from CodeLocals
+    // argument_count
+    if (strcmp(name, "argument_count") == 0) return RValue_makeReal((double) ctx->scriptArgCount);
+
+    // argument[N] - array-style access to script arguments
+    if (strcmp(name, "argument") == 0) {
+        if (ctx->scriptArgs != nullptr && ctx->scriptArgCount > arrayIndex && arrayIndex >= 0) {
+            RValue val = ctx->scriptArgs[arrayIndex];
+            val.ownsString = false;
+            return val;
+        }
+        return RValue_makeUndefined();
+    }
+
+    // Argument variables (argument0..argument15 are built-in in GMS bytecode, stored in scriptArgs)
     const int argNumber = extractArgumentNumber(name);
     if (argNumber != -1) {
-        // Find current code's CodeLocals to map argument name to local varID
-        const char* codeName = ctx->currentCodeName;
-        if (codeName != nullptr) {
-            CodeLocals* cl = VM_resolveCodeLocals(ctx, codeName);
-
-            if (cl != nullptr) {
-                forEach(LocalVar, local, cl->locals, cl->localVarCount) {
-                    if (strcmp(local->name, name) == 0) {
-                        if (ctx->localVarCount > local->index) {
-                            RValue val = ctx->localVars[local->index];
-                            val.ownsString = false;
-                            return val;
-                        }
-                        break;
-                    }
-                }
-            }
+        if (ctx->scriptArgs != nullptr && ctx->scriptArgCount > argNumber) {
+            RValue val = ctx->scriptArgs[argNumber];
+            val.ownsString = false;
+            return val;
         }
         return RValue_makeUndefined();
     }
@@ -217,23 +216,21 @@ void VMBuiltins_setVariable(VMContext* ctx, const char* name, RValue val, int32_
         return;
     }
 
+    // argument[N] - array-style write to script arguments
+    if (strcmp(name, "argument") == 0) {
+        if (ctx->scriptArgs != nullptr && ctx->scriptArgCount > arrayIndex && arrayIndex >= 0) {
+            RValue_free(&ctx->scriptArgs[arrayIndex]);
+            ctx->scriptArgs[arrayIndex] = val;
+        }
+        return;
+    }
+
     // Argument variables
     const int argNumber = extractArgumentNumber(name);
     if (argNumber != -1) {
-        const char* codeName = ctx->currentCodeName;
-        if (codeName != nullptr) {
-            CodeLocals* cl = VM_resolveCodeLocals(ctx, codeName);
-            if (cl != nullptr) {
-                forEach(LocalVar, local, cl->locals, cl->localVarCount) {
-                    if (strcmp(local->name, name) == 0) {
-                        if (ctx->localVarCount > local->index) {
-                            RValue_free(&ctx->localVars[local->index]);
-                            ctx->localVars[local->index] = val;
-                        }
-                        return;
-                    }
-                }
-            }
+        if (ctx->scriptArgs != nullptr && ctx->scriptArgCount > argNumber) {
+            RValue_free(&ctx->scriptArgs[argNumber]);
+            ctx->scriptArgs[argNumber] = val;
         }
         return;
     }
