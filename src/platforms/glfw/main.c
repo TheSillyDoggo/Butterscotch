@@ -205,8 +205,14 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Initialize the first room and fire Game Start / Room Start events
+    Runner_initFirstRoom(runner);
+
     // Main loop
     while (!glfwWindowShouldClose(window)) {
+        // Run one game step (Begin Step, Step, End Step, room transitions)
+        Runner_step(runner);
+
         Room* activeRoom = runner->currentRoom;
 
         int rInt = BGR_R(activeRoom->backgroundColor);
@@ -229,8 +235,6 @@ int main(int argc, char* argv[]) {
                 glfwSetWindowShouldClose(window, GLFW_TRUE);
             }
         }
-
-        runner->frameCount++;
 
         glfwSwapBuffers(window);
         glfwPollEvents();

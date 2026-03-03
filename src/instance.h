@@ -1,7 +1,27 @@
 #pragma once
 
-typedef struct {
-    double x;
-    double y;
-    bool persistent;
+#include <stdint.h>
+#include "rvalue.h"
+
+typedef struct Instance {
+    uint32_t instanceId;
+    int32_t objectIndex;
+    double x, y;
+    bool persistent, solid, active, visible;
+
+    // Per-instance self variable storage
+    RValue* selfVars;
+    uint32_t selfVarCount;
+    ArrayMapEntry* selfArrayMap;
+
+    // Built-in instance properties
+    int32_t spriteIndex;
+    double imageSpeed, imageIndex;
+    double imageXscale, imageYscale, imageAngle, imageAlpha;
+    uint32_t imageBlend;
+    int32_t depth;
+    int32_t alarm[12];
 } Instance;
+
+Instance* Instance_create(uint32_t instanceId, int32_t objectIndex, double x, double y, uint32_t selfVarCount);
+void Instance_free(Instance* instance);

@@ -128,3 +128,9 @@ static bool RValue_toBool(RValue val) {
         default:            return false;
     }
 }
+
+// ===[ ArrayMapEntry - used by all array variable storage ]===
+typedef struct {
+    int64_t key;
+    RValue value;
+} ArrayMapEntry;

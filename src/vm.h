@@ -80,6 +80,7 @@ typedef struct CallFrame {
     RValue* savedLocals;
     uint32_t savedLocalsCount;
     const char* savedCodeName;
+    ArrayMapEntry* savedLocalArrayMap;
     struct CallFrame* parent;
 } CallFrame;
 
@@ -91,9 +92,13 @@ typedef struct {
     int32_t top;
 } VMStack;
 
+// Forward declaration for Runner
+struct Runner;
+
 // ===[ VMContext - Holds all VM state ]===
 typedef struct VMContext {
     DataWin* dataWin;
+    struct Runner* runner;
     uint8_t* bytecodeBase;
     uint32_t ip;
     uint32_t codeEnd;
@@ -106,11 +111,17 @@ typedef struct VMContext {
     uint32_t selfVarCount;
     int32_t selfId;
     int32_t otherId;
+    struct Instance* currentInstance;
     CallFrame* callStack;
     int32_t callDepth;
     const char* currentCodeName;
+    // Array variable maps: key = ((int64_t)varID << 32) | (uint32_t)arrayIndex
+    ArrayMapEntry* globalArrayMap;
+    ArrayMapEntry* localArrayMap;
     // funcName -> codeIndex hash map (stb_ds)
     struct { char* key; int32_t value; }* funcMap;
+    // varName -> varID hash map for global variables (stb_ds)
+    struct { char* key; int32_t value; }* globalVarNameMap;
     // "codeName\tfuncName" -> true, for deduplicating unknown function warnings
     struct { char* key; bool value; }* loggedUnknownFuncs;
     // "codeName\tfuncName" -> true, for deduplicating stubbed function warnings
@@ -125,6 +136,7 @@ typedef struct VMContext {
 // ===[ Public API ]===
 VMContext* VM_create(DataWin* dataWin);
 RValue VM_executeCode(VMContext* ctx, int32_t codeIndex);
+RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t argCount);
 void VM_free(VMContext* ctx);
 
 static const char* VM_getCallerName(VMContext* ctx) {

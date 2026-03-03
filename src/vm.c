@@ -1,5 +1,6 @@
 #include "vm.h"
 #include "vm_builtins.h"
+#include "instance.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -172,6 +173,39 @@ static uint32_t resolveFuncOperand(VMContext* ctx, const uint8_t* extraData) {
     return hmget(ctx->funcRefMap, absoluteOffset);
 }
 
+// ===[ Array Map Helpers ]===
+
+// Key encoding for array maps: upper 32 bits = varID, lower 32 bits = array index
+static int64_t arrayMapKey(int32_t varID, int32_t arrayIndex) {
+    return ((int64_t) varID << 32) | (uint32_t) arrayIndex;
+}
+
+// Read from an array map, returning default RValue_makeReal(0.0) if not found
+// Returns a non-owning copy: the array map retains ownership of any owned strings.
+static RValue arrayMapGet(ArrayMapEntry* map, int32_t varID, int32_t arrayIndex) {
+    int64_t k = arrayMapKey(varID, arrayIndex);
+    ptrdiff_t idx = hmgeti(map, k);
+    if (0 > idx) return RValue_makeReal(0.0);
+    RValue result = map[idx].value;
+    result.ownsString = false;
+    return result;
+}
+
+// Write to an array map
+static void arrayMapSet(ArrayMapEntry** map, int32_t varID, int32_t arrayIndex, RValue val) {
+    int64_t k = arrayMapKey(varID, arrayIndex);
+    // Free old value if it exists
+    ptrdiff_t idx = hmgeti(*map, k);
+    if (idx >= 0) {
+        RValue_free(&(*map)[idx].value);
+    }
+    // If storing a non-owning string, make an owning copy
+    if (val.type == RVALUE_STRING && !val.ownsString && val.string != nullptr) {
+        val = RValue_makeOwnedString(strdup(val.string));
+    }
+    hmput(*map, k, val);
+}
+
 // ===[ Variable Resolution ]===
 
 static RValue resolveVariableRead(VMContext* ctx, int16_t instanceType, uint32_t varRef) {
@@ -179,54 +213,160 @@ static RValue resolveVariableRead(VMContext* ctx, int16_t instanceType, uint32_t
     require(ctx->dataWin->vari.variableCount > varIndex);
     Variable* varDef = &ctx->dataWin->vari.variables[varIndex];
 
+    // Check for built-in variable (varID == -6 sentinel)
+    if (varDef->varID == -6) {
+        uint8_t varType2 = (varRef >> 24) & 0xFF;
+        int32_t arrayIndex2 = -1;
+        if (varType2 == VARTYPE_ARRAY || varType2 == VARTYPE_STACKTOP) {
+            RValue indexVal2 = stackPop(&ctx->stack);
+            arrayIndex2 = RValue_toInt32(indexVal2);
+            RValue_free(&indexVal2);
+            if (varType2 == VARTYPE_STACKTOP) {
+                RValue stacktop2 = stackPop(&ctx->stack);
+                RValue_free(&stacktop2);
+            }
+        }
+        return VMBuiltins_getVariable(ctx, varDef->name, arrayIndex2);
+    }
+
     // Check for array access
     uint8_t varType = (varRef >> 24) & 0xFF;
     if (varType == VARTYPE_ARRAY || varType == VARTYPE_STACKTOP) {
-        fprintf(stderr, "VM: Array/StackTop variable access not yet implemented (variable '%s', varType=0x%02X)\n", varDef->name, varType);
-        return RValue_makeUndefined();
+        // Pop array index from stack
+        RValue indexVal = stackPop(&ctx->stack);
+        int32_t arrayIndex = RValue_toInt32(indexVal);
+        RValue_free(&indexVal);
+
+        // If stacktop, pop the instance id too (we ignore it for now)
+        if (varType == VARTYPE_STACKTOP) {
+            RValue stacktop = stackPop(&ctx->stack);
+            RValue_free(&stacktop);
+        }
+
+        switch (instanceType) {
+            case INSTANCE_LOCAL:
+                return arrayMapGet(ctx->localArrayMap, varDef->varID, arrayIndex);
+            case INSTANCE_GLOBAL:
+                return arrayMapGet(ctx->globalArrayMap, varDef->varID, arrayIndex);
+            case INSTANCE_SELF:
+            default: {
+                // INSTANCE_SELF or positive instanceType (object index) - both use current instance
+                struct Instance* inst = ctx->currentInstance;
+                if (inst != nullptr) {
+                    return arrayMapGet(inst->selfArrayMap, varDef->varID, arrayIndex);
+                }
+                fprintf(stderr, "VM: Array read on self var '%s' but no current instance (instanceType=%d)\n", varDef->name, instanceType);
+                return RValue_makeReal(0.0);
+            }
+        }
     }
 
+    RValue result;
     switch (instanceType) {
         case INSTANCE_LOCAL:
             require(ctx->localVarCount > (uint32_t) varDef->varID);
-            return ctx->localVars[varDef->varID];
+            result = ctx->localVars[varDef->varID];
+            break;
         case INSTANCE_GLOBAL:
             require(ctx->globalVarCount > (uint32_t) varDef->varID);
-            return ctx->globalVars[varDef->varID];
+            result = ctx->globalVars[varDef->varID];
+            break;
         case INSTANCE_SELF:
-            require(ctx->selfVarCount > (uint32_t) varDef->varID);
-            return ctx->selfVars[varDef->varID];
         default:
-            fprintf(stderr, "VM: Unhandled instance type %d for variable read '%s'\n", instanceType, varDef->name);
-            return RValue_makeUndefined();
+            // INSTANCE_SELF or positive instanceType (object index)
+            require(ctx->selfVarCount > (uint32_t) varDef->varID);
+            result = ctx->selfVars[varDef->varID];
+            break;
     }
+    // Return a non-owning copy: the variable slot retains ownership
+    result.ownsString = false;
+    return result;
 }
 
-static RValue* resolveVariableWrite(VMContext* ctx, int16_t instanceType, uint32_t varRef) {
+static void resolveVariableWrite(VMContext* ctx, int16_t instanceType, uint32_t varRef, RValue val) {
     uint32_t varIndex = varRef & 0x07FFFFFF;
     require(ctx->dataWin->vari.variableCount > varIndex);
     Variable* varDef = &ctx->dataWin->vari.variables[varIndex];
 
+    // Check for built-in variable (varID == -6 sentinel)
+    if (varDef->varID == -6) {
+        uint8_t varType = (varRef >> 24) & 0xFF;
+        int32_t arrayIndex = -1;
+        if (varType == VARTYPE_ARRAY || varType == VARTYPE_STACKTOP) {
+            RValue indexVal = stackPop(&ctx->stack);
+            arrayIndex = RValue_toInt32(indexVal);
+            RValue_free(&indexVal);
+            if (varType == VARTYPE_STACKTOP) {
+                RValue stacktop = stackPop(&ctx->stack);
+                RValue_free(&stacktop);
+            }
+        }
+        VMBuiltins_setVariable(ctx, varDef->name, val, arrayIndex);
+        return;
+    }
+
     // Check for array access
     uint8_t varType = (varRef >> 24) & 0xFF;
     if (varType == VARTYPE_ARRAY || varType == VARTYPE_STACKTOP) {
-        fprintf(stderr, "VM: Array/StackTop variable write not yet implemented (variable '%s', varType=0x%02X)\n", varDef->name, varType);
-        abort();
+        // Pop array index from stack
+        RValue indexVal = stackPop(&ctx->stack);
+        int32_t arrayIndex = RValue_toInt32(indexVal);
+        RValue_free(&indexVal);
+
+        // If stacktop, pop the instance id too (we ignore it for now)
+        if (varType == VARTYPE_STACKTOP) {
+            RValue stacktop = stackPop(&ctx->stack);
+            RValue_free(&stacktop);
+        }
+
+        switch (instanceType) {
+            case INSTANCE_LOCAL:
+                arrayMapSet(&ctx->localArrayMap, varDef->varID, arrayIndex, val);
+                return;
+            case INSTANCE_GLOBAL:
+                arrayMapSet(&ctx->globalArrayMap, varDef->varID, arrayIndex, val);
+                return;
+            case INSTANCE_SELF:
+            default: {
+                // INSTANCE_SELF or positive instanceType (object index)
+                struct Instance* inst = ctx->currentInstance;
+                if (inst != nullptr) {
+                    arrayMapSet(&inst->selfArrayMap, varDef->varID, arrayIndex, val);
+                    return;
+                }
+                fprintf(stderr, "VM: Array write on self var '%s' but no current instance (instanceType=%d)\n", varDef->name, instanceType);
+                return;
+            }
+        }
     }
 
+    RValue* dest;
     switch (instanceType) {
         case INSTANCE_LOCAL:
             require(ctx->localVarCount > (uint32_t) varDef->varID);
-            return &ctx->localVars[varDef->varID];
+            dest = &ctx->localVars[varDef->varID];
+            break;
         case INSTANCE_GLOBAL:
             require(ctx->globalVarCount > (uint32_t) varDef->varID);
-            return &ctx->globalVars[varDef->varID];
+            dest = &ctx->globalVars[varDef->varID];
+            break;
         case INSTANCE_SELF:
-            require(ctx->selfVarCount > (uint32_t) varDef->varID);
-            return &ctx->selfVars[varDef->varID];
         default:
-            fprintf(stderr, "VM: Unhandled instance type %d for variable write '%s'\n", instanceType, varDef->name);
-            abort();
+            // INSTANCE_SELF or positive instanceType (object index)
+            require(ctx->selfVarCount > (uint32_t) varDef->varID);
+            dest = &ctx->selfVars[varDef->varID];
+            break;
+    }
+
+    // Free old value if it owns a string
+    RValue_free(dest);
+
+    // If storing a non-owning string reference, make an owning copy
+    // so the variable won't dangle when the source (e.g. a local var or stack value) is freed
+    if (val.type == RVALUE_STRING && !val.ownsString && val.string != nullptr) {
+        *dest = RValue_makeOwnedString(strdup(val.string));
+    } else {
+        *dest = val;
     }
 }
 
@@ -313,8 +453,24 @@ static void handlePushLoc(VMContext* ctx, uint32_t instr, const uint8_t* extraDa
     uint32_t varIndex = varRef & 0x07FFFFFF;
     require(ctx->dataWin->vari.variableCount > varIndex);
     Variable* varDef = &ctx->dataWin->vari.variables[varIndex];
+
+    uint8_t varType = (varRef >> 24) & 0xFF;
+    if (varType == VARTYPE_ARRAY || varType == VARTYPE_STACKTOP) {
+        RValue indexVal = stackPop(&ctx->stack);
+        int32_t arrayIndex = RValue_toInt32(indexVal);
+        RValue_free(&indexVal);
+        if (varType == VARTYPE_STACKTOP) {
+            RValue stacktop = stackPop(&ctx->stack);
+            RValue_free(&stacktop);
+        }
+        stackPush(&ctx->stack, arrayMapGet(ctx->localArrayMap, varDef->varID, arrayIndex));
+        return;
+    }
+
     require(ctx->localVarCount > (uint32_t) varDef->varID);
-    stackPush(&ctx->stack, ctx->localVars[varDef->varID]);
+    RValue locVal = ctx->localVars[varDef->varID];
+    locVal.ownsString = false; // Non-owning copy
+    stackPush(&ctx->stack, locVal);
 }
 
 static void handlePushGlb(VMContext* ctx, uint32_t instr, const uint8_t* extraData) {
@@ -323,8 +479,24 @@ static void handlePushGlb(VMContext* ctx, uint32_t instr, const uint8_t* extraDa
     uint32_t varIndex = varRef & 0x07FFFFFF;
     require(ctx->dataWin->vari.variableCount > varIndex);
     Variable* varDef = &ctx->dataWin->vari.variables[varIndex];
+
+    uint8_t varType = (varRef >> 24) & 0xFF;
+    if (varType == VARTYPE_ARRAY || varType == VARTYPE_STACKTOP) {
+        RValue indexVal = stackPop(&ctx->stack);
+        int32_t arrayIndex = RValue_toInt32(indexVal);
+        RValue_free(&indexVal);
+        if (varType == VARTYPE_STACKTOP) {
+            RValue stacktop = stackPop(&ctx->stack);
+            RValue_free(&stacktop);
+        }
+        stackPush(&ctx->stack, arrayMapGet(ctx->globalArrayMap, varDef->varID, arrayIndex));
+        return;
+    }
+
     require(ctx->globalVarCount > (uint32_t) varDef->varID);
-    stackPush(&ctx->stack, ctx->globalVars[varDef->varID]);
+    RValue glbVal = ctx->globalVars[varDef->varID];
+    glbVal.ownsString = false; // Non-owning copy
+    stackPush(&ctx->stack, glbVal);
 }
 
 static void handlePushBltn(VMContext* ctx, uint32_t instr, const uint8_t* extraData) {
@@ -333,8 +505,22 @@ static void handlePushBltn(VMContext* ctx, uint32_t instr, const uint8_t* extraD
     uint32_t varIndex = varRef & 0x07FFFFFF;
     require(ctx->dataWin->vari.variableCount > varIndex);
     Variable* varDef = &ctx->dataWin->vari.variables[varIndex];
-    fprintf(stderr, "VM: PushBltn not implemented - built-in variable '%s' (varID=%d)\n", varDef->name, varDef->varID);
-    stackPush(&ctx->stack, RValue_makeReal(0.0));
+
+    // Check for array access (e.g. alarm[0])
+    uint8_t varType = (varRef >> 24) & 0xFF;
+    int32_t arrayIndex = -1;
+    if (varType == VARTYPE_ARRAY || varType == VARTYPE_STACKTOP) {
+        RValue indexVal = stackPop(&ctx->stack);
+        arrayIndex = RValue_toInt32(indexVal);
+        RValue_free(&indexVal);
+        if (varType == VARTYPE_STACKTOP) {
+            RValue stacktop = stackPop(&ctx->stack);
+            RValue_free(&stacktop);
+        }
+    }
+
+    RValue val = VMBuiltins_getVariable(ctx, varDef->name, arrayIndex);
+    stackPush(&ctx->stack, val);
 }
 
 static void handlePushI(VMContext* ctx, uint32_t instr) {
@@ -357,12 +543,7 @@ static void handlePop(VMContext* ctx, uint32_t instr, const uint8_t* extraData) 
         val = converted;
     }
 
-    RValue* dest = resolveVariableWrite(ctx, instanceType, varRef);
-
-    // Free old value if it owns a string
-    RValue_free(dest);
-
-    *dest = val;
+    resolveVariableWrite(ctx, instanceType, varRef, val);
 }
 
 static void handlePopz(VMContext* ctx) {
@@ -582,6 +763,7 @@ static void handleConv(VMContext* ctx, uint32_t instr) {
         case 0x12: result = RValue_makeReal((double) val.int32); break;
         case 0x32: result = RValue_makeInt64((int64_t) val.int32); break;
         case 0x42: result = RValue_makeBool(val.int32 > 0); break;
+        case 0x52: result = val; break; // Int32 -> Variable (passthrough)
         case 0x62: { char* s = RValue_toString(val); result = RValue_makeOwnedString(s); break; }
         case 0xF2: result = val; break;
 
@@ -594,6 +776,7 @@ static void handleConv(VMContext* ctx, uint32_t instr) {
         case 0x04: result = RValue_makeReal((double) val.int32); break;
         case 0x24: result = RValue_makeInt32(val.int32); break;
         case 0x34: result = RValue_makeInt64((int64_t) val.int32); break;
+        case 0x54: result = val; break; // Bool -> Variable (passthrough)
         case 0x64: { char* s = RValue_toString(val); result = RValue_makeOwnedString(s); break; }
 
         // Variable (5) -> other
@@ -752,8 +935,9 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
         if (0 > shgeti(ctx->loggedUnknownFuncs, dedupKey)) {
             shput(ctx->loggedUnknownFuncs, dedupKey, true);
             fprintf(stderr, "VM: Unknown function '%s' called from '%s'!\n", funcName, callerName);
+        } else {
+            free(dedupKey);
         }
-        free(dedupKey);
 
         // Free arguments and push undefined
         if (args != nullptr) {
@@ -777,9 +961,11 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
     frame->savedLocals = ctx->localVars;
     frame->savedLocalsCount = ctx->localVarCount;
     frame->savedCodeName = ctx->currentCodeName;
+    frame->savedLocalArrayMap = ctx->localArrayMap;
     frame->parent = ctx->callStack;
     ctx->callStack = frame;
     ctx->callDepth++;
+    ctx->localArrayMap = nullptr;
 
     // Set up callee
     ctx->bytecodeBase = ctx->dataWin->fileBuffer + code->bytecodeAbsoluteOffset;
@@ -860,8 +1046,15 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
     }
     free(ctx->localVars);
 
+    // Free callee local array map
+    for (ptrdiff_t i = 0; hmlen(ctx->localArrayMap) > i; i++) {
+        RValue_free(&ctx->localArrayMap[i].value);
+    }
+    hmfree(ctx->localArrayMap);
+
     ctx->localVars = saved->savedLocals;
     ctx->localVarCount = saved->savedLocalsCount;
+    ctx->localArrayMap = saved->savedLocalArrayMap;
     ctx->currentCodeName = saved->savedCodeName;
     ctx->callStack = saved->parent;
     ctx->callDepth--;
@@ -1034,22 +1227,36 @@ VMContext* VM_create(DataWin* dataWin) {
         ctx->selfVars[i].type = RVALUE_UNDEFINED;
     }
 
+    ctx->globalArrayMap = nullptr;
+    ctx->localArrayMap = nullptr;
+
+    // Build globalVarNameMap: varName -> varID for global variables
+    ctx->globalVarNameMap = nullptr;
+    forEach(Variable, v2, dataWin->vari.variables, dataWin->vari.variableCount) {
+        if (v2->instanceType == INSTANCE_GLOBAL && v2->varID >= 0) {
+            ptrdiff_t existing = shgeti(ctx->globalVarNameMap, (char*) v2->name);
+            if (0 > existing) {
+                shput(ctx->globalVarNameMap, (char*) v2->name, v2->varID);
+            }
+        }
+    }
+
     // Build funcName -> codeIndex hash map from SCPT chunk
     ctx->funcMap = nullptr;
     forEach(Script, s, dataWin->scpt.scripts, dataWin->scpt.count) {
         if (s->name != nullptr && s->codeId >= 0) {
-            // Script names map to code entries. The code entry name is typically
-            // "gml_Script_<scriptName>", so we store with the code entry's actual name
-            // since that's what the FUNC chunk references.
             if (dataWin->code.count > (uint32_t) s->codeId) {
                 const char* codeName = dataWin->code.entries[s->codeId].name;
+                // Map the full code entry name (e.g. "gml_Script_SCR_GAMESTART")
                 shput(ctx->funcMap, (char*) codeName, s->codeId);
+                // Also map the bare script name (e.g. "SCR_GAMESTART")
+                // since the FUNC chunk references use bare names in CALL instructions
+                shput(ctx->funcMap, (char*) s->name, s->codeId);
             }
         }
     }
 
     // Also map code entry names directly for non-script code (object events, room creation codes, etc.)
-    // These may be called by the Call instruction using their FUNC name
     repeat(dataWin->code.count, i) {
         const char* codeName = dataWin->code.entries[i].name;
         ptrdiff_t existing = shgeti(ctx->funcMap, (char*) codeName);
@@ -1080,6 +1287,7 @@ RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     if (localsCount == 0) localsCount = 1; // at least 1 slot to avoid nullptr
     ctx->localVars = calloc(localsCount, sizeof(RValue));
     ctx->localVarCount = localsCount;
+    ctx->localArrayMap = nullptr;
     repeat(localsCount, i) {
         ctx->localVars[i].type = RVALUE_UNDEFINED;
     }
@@ -1096,6 +1304,110 @@ RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     free(ctx->localVars);
     ctx->localVars = nullptr;
     ctx->localVarCount = 0;
+
+    // Free local array map
+    for (ptrdiff_t i = 0; hmlen(ctx->localArrayMap) > i; i++) {
+        RValue_free(&ctx->localArrayMap[i].value);
+    }
+    hmfree(ctx->localArrayMap);
+    ctx->localArrayMap = nullptr;
+
+    return result;
+}
+
+RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t argCount) {
+    require(codeIndex >= 0 && ctx->dataWin->code.count > (uint32_t) codeIndex);
+    CodeEntry* code = &ctx->dataWin->code.entries[codeIndex];
+
+    // Save current frame
+    CallFrame* frame = malloc(sizeof(CallFrame));
+    frame->savedIP = ctx->ip;
+    frame->savedCodeEnd = ctx->codeEnd;
+    frame->savedBytecodeBase = ctx->bytecodeBase;
+    frame->savedLocals = ctx->localVars;
+    frame->savedLocalsCount = ctx->localVarCount;
+    frame->savedCodeName = ctx->currentCodeName;
+    frame->savedLocalArrayMap = ctx->localArrayMap;
+    frame->parent = ctx->callStack;
+    ctx->callStack = frame;
+    ctx->callDepth++;
+
+    // Set up callee
+    ctx->bytecodeBase = ctx->dataWin->fileBuffer + code->bytecodeAbsoluteOffset;
+    ctx->ip = 0;
+    ctx->codeEnd = code->length;
+    ctx->currentCodeName = code->name;
+    ctx->localArrayMap = nullptr;
+
+    uint32_t localsCount = code->localsCount;
+    if ((uint32_t) argCount > localsCount) localsCount = (uint32_t) argCount;
+    if (localsCount == 0) localsCount = 1;
+    ctx->localVars = calloc(localsCount, sizeof(RValue));
+    ctx->localVarCount = localsCount;
+    repeat(localsCount, i) {
+        ctx->localVars[i].type = RVALUE_UNDEFINED;
+    }
+
+    // Find CodeLocals to map argument names to varIDs
+    CodeLocals* codeLocals = nullptr;
+    forEach(CodeLocals, cl, ctx->dataWin->func.codeLocals, ctx->dataWin->func.codeLocalsCount) {
+        if (strcmp(cl->name, code->name) == 0) {
+            codeLocals = cl;
+            break;
+        }
+    }
+
+    if (codeLocals != nullptr && args != nullptr) {
+        repeat(argCount, argIdx) {
+            char argName[32];
+            snprintf(argName, sizeof(argName), "argument%d", argIdx);
+            forEach(LocalVar, local, codeLocals->locals, codeLocals->localVarCount) {
+                if (strcmp(local->name, argName) == 0) {
+                    uint32_t varID = local->index;
+                    if (localsCount > varID) {
+                        // Copy the arg value (duplicate owned strings)
+                        RValue argCopy = args[argIdx];
+                        if (argCopy.type == RVALUE_STRING && argCopy.ownsString && argCopy.string != nullptr) {
+                            argCopy.string = strdup(argCopy.string);
+                        } else if (argCopy.type == RVALUE_STRING && !argCopy.ownsString) {
+                            // Make a non-owning copy (fine, original stays valid)
+                        }
+                        ctx->localVars[varID] = argCopy;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    // Execute the callee
+    RValue result = executeLoop(ctx);
+
+    // Restore caller frame
+    CallFrame* saved = ctx->callStack;
+    ctx->ip = saved->savedIP;
+    ctx->codeEnd = saved->savedCodeEnd;
+    ctx->bytecodeBase = saved->savedBytecodeBase;
+
+    // Free callee locals
+    repeat(ctx->localVarCount, i) {
+        RValue_free(&ctx->localVars[i]);
+    }
+    free(ctx->localVars);
+
+    // Free callee local array map
+    for (ptrdiff_t i = 0; hmlen(ctx->localArrayMap) > i; i++) {
+        RValue_free(&ctx->localArrayMap[i].value);
+    }
+    hmfree(ctx->localArrayMap);
+
+    ctx->localVars = saved->savedLocals;
+    ctx->localVarCount = saved->savedLocalsCount;
+    ctx->localArrayMap = saved->savedLocalArrayMap;
+    ctx->currentCodeName = saved->savedCodeName;
+    ctx->callStack = saved->parent;
+    ctx->callDepth--;
+    free(saved);
 
     return result;
 }
@@ -1119,8 +1431,19 @@ void VM_free(VMContext* ctx) {
         free(ctx->selfVars);
     }
 
+    // Free array maps
+    for (ptrdiff_t i = 0; hmlen(ctx->globalArrayMap) > i; i++) {
+        RValue_free(&ctx->globalArrayMap[i].value);
+    }
+    hmfree(ctx->globalArrayMap);
+    for (ptrdiff_t i = 0; hmlen(ctx->localArrayMap) > i; i++) {
+        RValue_free(&ctx->localArrayMap[i].value);
+    }
+    hmfree(ctx->localArrayMap);
+
     // Free hash maps
     shfree(ctx->funcMap);
+    shfree(ctx->globalVarNameMap);
     shfree(ctx->loggedUnknownFuncs);
     shfree(ctx->loggedStubbedFuncs);
     hmfree(ctx->varRefMap);
