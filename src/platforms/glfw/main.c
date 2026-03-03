@@ -26,6 +26,7 @@ typedef struct {
     const char* screenshotPattern;
     FrameSetEntry* screenshotFrames;
     bool headless;
+    bool printRooms;
     bool printDeclaredFunctions;
 } CommandLineArgs;
 
@@ -36,7 +37,8 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         {"screenshot",          required_argument, nullptr, 's'},
         {"screenshot-at-frame", required_argument, nullptr, 'f'},
         {"headless",            no_argument,       nullptr, 'h'},
-        {"print-declared-functions", no_argument,       nullptr, 'p'},
+        {"print-rooms", no_argument,               nullptr, 'r'},
+        {"print-declared-functions", no_argument,  nullptr, 'p'},
         {nullptr,               0,                 nullptr,  0 }
     };
 
@@ -61,6 +63,9 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
             }
             case 'h':
                 args->headless = true;
+                break;
+            case 'r':
+                args->printRooms = true;
                 break;
             case 'p':
                 args->printDeclaredFunctions = true;
@@ -129,6 +134,31 @@ int main(int argc, char* argv[]) {
 
     // Initialize VM
     VMContext* vm = VM_create(dataWin);
+
+    if (args.printRooms) {
+        Room* room;
+        forEachIndexed(room, idx, dataWin->room.rooms, dataWin->room.count) {
+            printf("[%d] %s\n", idx, room->name);
+
+            RoomGameObject* roomGameObject;
+            forEachIndexed(roomGameObject, idx2, room->gameObjects, room->gameObjectCount) {
+                GameObject* gameObject = &dataWin->objt.objects[roomGameObject->objectDefinition];
+                printf(
+                    "  [%d] %s (x=%d,y=%d,persistent=%d,solid=%d,spriteId=%d)\n",
+                    idx2,
+                    gameObject->name,
+                    roomGameObject->x,
+                    roomGameObject->y,
+                    gameObject->persistent,
+                    gameObject->solid,
+                    gameObject->spriteId
+                );
+            }
+        }
+        VM_free(vm);
+        DataWin_free(dataWin);
+        return 0;
+    }
 
     if (args.printDeclaredFunctions) {
         repeat(hmlen(vm->funcMap), i) {
