@@ -560,6 +560,25 @@ void Runner_step(Runner* runner) {
     // Execute End Step for all instances
     Runner_executeEventForAll(runner, EVENT_STEP, STEP_END);
 
+    // Advance image_index by image_speed for all active instances
+    int32_t animCount = (int32_t) arrlen(runner->instances);
+    repeat(animCount, i) {
+        Instance* inst = runner->instances[i];
+        if (!inst->active) continue;
+        if (0 > inst->spriteIndex) continue;
+
+        inst->imageIndex += inst->imageSpeed;
+
+        // Wrap image_index (matches HTML5 runner: manual subtract/add instead of using fmod)
+        Sprite* sprite = &runner->dataWin->sprt.sprites[inst->spriteIndex];
+        double frameCount = (double) sprite->textureCount;
+        if (inst->imageIndex >= frameCount) {
+            inst->imageIndex -= frameCount;
+        } else if (0.0 > inst->imageIndex) {
+            inst->imageIndex += frameCount;
+        }
+    }
+
     // Handle room transition
     if (runner->pendingRoom >= 0) {
         int32_t oldRoomIndex = runner->currentRoomIndex;
