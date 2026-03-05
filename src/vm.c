@@ -21,7 +21,7 @@ static bool shouldTraceStack(VMContext* ctx) {
 static void stackPush(VMContext* ctx, RValue val) {
     require(VM_STACK_SIZE > ctx->stack.top);
     if (shouldTraceStack(ctx)) {
-        char* valStr = RValue_toStringFancy(val);
+        char* valStr = RValue_toStringTyped(val);
         printf("VM: [%s] PUSH %s [stack=%d -> %d]\n", ctx->currentCodeName, valStr, ctx->stack.top, ctx->stack.top + 1);
         free(valStr);
     }
@@ -32,7 +32,7 @@ static RValue stackPop(VMContext* ctx) {
     require(ctx->stack.top > 0);
     RValue val = ctx->stack.slots[--ctx->stack.top];
     if (shouldTraceStack(ctx)) {
-        char* valStr = RValue_toStringFancy(val);
+        char* valStr = RValue_toStringTyped(val);
         printf("VM: [%s] POP  %s [stack=%d -> %d]\n", ctx->currentCodeName, valStr, ctx->stack.top + 1, ctx->stack.top);
         free(valStr);
     }
@@ -1541,6 +1541,9 @@ static const char* opcodeName(uint8_t opcode) {
     }
 }
 
+// Forward declaration for formatInstruction (defined in disassembler section, used by trace-opcodes)
+static void formatInstruction(VMContext* ctx, const uint8_t* bytecodeBase, uint32_t instrAddr, uint32_t instr, const uint8_t* extraData, char* opcodeStr, size_t opcodeSize, char* operandStr, size_t operandSize, char* commentStr, size_t commentSize);
+
 static RValue executeLoop(VMContext* ctx) {
     while (ctx->codeEnd > ctx->ip) {
         uint32_t instrAddr = ctx->ip;
@@ -1559,7 +1562,13 @@ static RValue executeLoop(VMContext* ctx) {
 
         if (shlen(ctx->opcodesToBeTraced) > 0) {
             if (shgeti(ctx->opcodesToBeTraced, "*") != -1 || shgeti(ctx->opcodesToBeTraced, ctx->currentCodeName) != -1) {
-                printf("VM: [%s] @%u %s (0x%08X) [stack=%d]\n", ctx->currentCodeName, instrAddr, opcodeName(opcode), instr, ctx->stack.top);
+                char opcodeStr[32], operandStr[256] = "", commentStr[128] = "";
+                formatInstruction(ctx, ctx->bytecodeBase, instrAddr, instr, extraData, opcodeStr, sizeof(opcodeStr), operandStr, sizeof(operandStr), commentStr, sizeof(commentStr));
+                if (operandStr[0] != '\0') {
+                    printf("VM: [%s] @%04X [0x%08X] %s %s [stack=%d]\n", ctx->currentCodeName, instrAddr, instr, opcodeStr, operandStr, ctx->stack.top);
+                } else {
+                    printf("VM: [%s] @%04X [0x%08X] %s [stack=%d]\n", ctx->currentCodeName, instrAddr, instr, opcodeStr, ctx->stack.top);
+                }
             }
         }
 
@@ -1994,6 +2003,271 @@ static void disasmFormatVarComment(VMContext* ctx, const uint8_t* extraData, boo
     }
 }
 
+// Formats a single instruction into opcodeStr, operandStr, and commentStr buffers.
+// Used by both VM_disassemble and --trace-opcodes.
+// bytecodeBase is needed because the disassembler and trace have it from different sources.
+static void formatInstruction(VMContext* ctx, const uint8_t* bytecodeBase, uint32_t instrAddr, uint32_t instr, const uint8_t* extraData,
+                              char* opcodeStr, size_t opcodeSize, char* operandStr, size_t operandSize, char* commentStr, size_t commentSize) {
+    DataWin* dw = ctx->dataWin;
+    uint8_t opcode = instrOpcode(instr);
+    uint8_t type1 = instrType1(instr);
+    uint8_t type2 = instrType2(instr);
+    int16_t instType = instrInstanceType(instr);
+
+    switch (opcode) {
+        // Binary arithmetic/logic
+        case OP_ADD: case OP_SUB: case OP_MUL: case OP_DIV:
+        case OP_REM: case OP_MOD: case OP_AND: case OP_OR:
+        case OP_XOR: case OP_SHL: case OP_SHR:
+            snprintf(opcodeStr, opcodeSize, "%s.%c.%c", opcodeName(opcode), gmlTypeChar(type1), gmlTypeChar(type2));
+            snprintf(commentStr, commentSize, "// pops: [a, b] -> pushes: [result]");
+            break;
+
+        // Unary
+        case OP_NEG:
+            snprintf(opcodeStr, opcodeSize, "Neg.%c", gmlTypeChar(type1));
+            snprintf(commentStr, commentSize, "// pops: [a] -> pushes: [result]");
+            break;
+        case OP_NOT:
+            snprintf(opcodeStr, opcodeSize, "Not.%c", gmlTypeChar(type1));
+            if (type1 == GML_TYPE_BOOL) {
+                snprintf(commentStr, commentSize, "// pops: [a] -> pushes: [bool] (logical NOT)");
+            } else {
+                snprintf(commentStr, commentSize, "// pops: [a] -> pushes: [int] (bitwise NOT)");
+            }
+            break;
+
+        // Type conversion
+        case OP_CONV:
+            snprintf(opcodeStr, opcodeSize, "Conv.%c.%c", gmlTypeChar(type1), gmlTypeChar(type2));
+            snprintf(commentStr, commentSize, "// pops: [%c] -> pushes: [%c]", gmlTypeChar(type2), gmlTypeChar(type1));
+            break;
+
+        // Comparison
+        case OP_CMP:
+            snprintf(opcodeStr, opcodeSize, "Cmp.%c.%c", gmlTypeChar(type1), gmlTypeChar(type2));
+            snprintf(operandStr, operandSize, "%s", cmpKindName(instrCmpKind(instr)));
+            snprintf(commentStr, commentSize, "// pops: [a, b] -> pushes: [bool]");
+            break;
+
+        // Push
+        case OP_PUSH: {
+            switch (type1) {
+                case GML_TYPE_DOUBLE:
+                    snprintf(opcodeStr, opcodeSize, "Push.d");
+                    snprintf(operandStr, operandSize, "%g", readFloat64(extraData));
+                    snprintf(commentStr, commentSize, "// pushes: [double]");
+                    break;
+                case GML_TYPE_FLOAT:
+                    snprintf(opcodeStr, opcodeSize, "Push.f");
+                    snprintf(operandStr, operandSize, "%g", (double) readFloat32(extraData));
+                    snprintf(commentStr, commentSize, "// pushes: [float]");
+                    break;
+                case GML_TYPE_INT32:
+                    snprintf(opcodeStr, opcodeSize, "Push.i");
+                    snprintf(operandStr, operandSize, "%d", readInt32(extraData));
+                    snprintf(commentStr, commentSize, "// pushes: [int32]");
+                    break;
+                case GML_TYPE_INT64:
+                    snprintf(opcodeStr, opcodeSize, "Push.l");
+                    snprintf(operandStr, operandSize, "%lld", (long long) readInt64(extraData));
+                    snprintf(commentStr, commentSize, "// pushes: [int64]");
+                    break;
+                case GML_TYPE_BOOL:
+                    snprintf(opcodeStr, opcodeSize, "Push.b");
+                    snprintf(operandStr, operandSize, "%s", readInt32(extraData) != 0 ? "true" : "false");
+                    snprintf(commentStr, commentSize, "// pushes: [bool]");
+                    break;
+                case GML_TYPE_STRING: {
+                    snprintf(opcodeStr, opcodeSize, "Push.s");
+                    int32_t strIdx = readInt32(extraData);
+                    if (strIdx >= 0 && dw->strg.count > (uint32_t) strIdx) {
+                        const char* str = dw->strg.strings[strIdx];
+                        if (strlen(str) > 60) {
+                            snprintf(operandStr, operandSize, "\"%.57s...\"", str);
+                        } else {
+                            snprintf(operandStr, operandSize, "\"%s\"", str);
+                        }
+                    } else {
+                        snprintf(operandStr, operandSize, "[string:%d]", strIdx);
+                    }
+                    snprintf(commentStr, commentSize, "// pushes: [string]");
+                    break;
+                }
+                case GML_TYPE_VARIABLE:
+                    snprintf(opcodeStr, opcodeSize, "Push.v");
+                    disasmFormatVar(ctx, extraData, nullptr, (int32_t) instType, operandStr, operandSize);
+                    disasmFormatVarComment(ctx, extraData, false, commentStr, commentSize);
+                    break;
+                case GML_TYPE_INT16:
+                    snprintf(opcodeStr, opcodeSize, "Push.e");
+                    snprintf(operandStr, operandSize, "%d", (int32_t) instType);
+                    snprintf(commentStr, commentSize, "// pushes: [int16]");
+                    break;
+                default:
+                    snprintf(opcodeStr, opcodeSize, "Push.?");
+                    snprintf(operandStr, operandSize, "(unknown type 0x%X)", type1);
+                    break;
+            }
+            break;
+        }
+
+        // Scoped pushes
+        case OP_PUSHLOC:
+            snprintf(opcodeStr, opcodeSize, "PushLoc.v");
+            disasmFormatVar(ctx, extraData, "local", (int32_t) instType, operandStr, operandSize);
+            disasmFormatVarComment(ctx, extraData, false, commentStr, commentSize);
+            break;
+        case OP_PUSHGLB:
+            snprintf(opcodeStr, opcodeSize, "PushGlb.v");
+            disasmFormatVar(ctx, extraData, "global", (int32_t) instType, operandStr, operandSize);
+            disasmFormatVarComment(ctx, extraData, false, commentStr, commentSize);
+            break;
+        case OP_PUSHBLTN:
+            snprintf(opcodeStr, opcodeSize, "PushBltn.v");
+            disasmFormatVar(ctx, extraData, nullptr, (int32_t) instType, operandStr, operandSize);
+            disasmFormatVarComment(ctx, extraData, false, commentStr, commentSize);
+            break;
+
+        // PushI (int16 immediate)
+        case OP_PUSHI:
+            snprintf(opcodeStr, opcodeSize, "PushI.e");
+            snprintf(operandStr, operandSize, "%d", (int32_t) instType);
+            snprintf(commentStr, commentSize, "// pushes: [int16]");
+            break;
+
+        // Pop (store to variable)
+        case OP_POP:
+            snprintf(opcodeStr, opcodeSize, "Pop.%c.%c", gmlTypeChar(type1), gmlTypeChar(type2));
+            disasmFormatVar(ctx, extraData, nullptr, (int32_t) instType, operandStr, operandSize);
+            disasmFormatVarComment(ctx, extraData, true, commentStr, commentSize);
+            break;
+
+        // Unconditional branch
+        case OP_B: {
+            snprintf(opcodeStr, opcodeSize, "B");
+            int32_t offset = instrJumpOffset(instr);
+            uint32_t target = (uint32_t) ((int32_t) instrAddr + offset);
+            snprintf(operandStr, operandSize, "L_%04X (offset: %+d)", target, offset);
+            break;
+        }
+
+        // Conditional branches
+        case OP_BT: {
+            snprintf(opcodeStr, opcodeSize, "BT");
+            int32_t offset = instrJumpOffset(instr);
+            uint32_t target = (uint32_t) ((int32_t) instrAddr + offset);
+            snprintf(operandStr, operandSize, "L_%04X (offset: %+d)", target, offset);
+            snprintf(commentStr, commentSize, "// pops: [bool]");
+            break;
+        }
+        case OP_BF: {
+            snprintf(opcodeStr, opcodeSize, "BF");
+            int32_t offset = instrJumpOffset(instr);
+            uint32_t target = (uint32_t) ((int32_t) instrAddr + offset);
+            snprintf(operandStr, operandSize, "L_%04X (offset: %+d)", target, offset);
+            snprintf(commentStr, commentSize, "// pops: [bool]");
+            break;
+        }
+
+        // With-statement: PushEnv
+        case OP_PUSHENV: {
+            snprintf(opcodeStr, opcodeSize, "PushEnv");
+            int32_t offset = instrJumpOffset(instr);
+            uint32_t target = (uint32_t) ((int32_t) instrAddr + offset);
+            // Peek at previous instruction to identify the target object
+            const char* targetName = nullptr;
+            if (instrAddr >= 4) {
+                uint32_t prevInstr = readUint32(bytecodeBase + instrAddr - 4);
+                if (instrOpcode(prevInstr) == OP_PUSHI) {
+                    int16_t objIdx = (int16_t) (prevInstr & 0xFFFF);
+                    targetName = disasmScopeName(ctx, (int32_t) objIdx);
+                }
+            }
+            if (targetName != nullptr) {
+                snprintf(operandStr, operandSize, "%s (target: L_%04X, offset: %+d)", targetName, target, offset);
+            } else {
+                snprintf(operandStr, operandSize, "(target: L_%04X, offset: %+d)", target, offset);
+            }
+            snprintf(commentStr, commentSize, "// pops: [target]");
+            break;
+        }
+
+        // With-statement: PopEnv
+        case OP_POPENV: {
+            snprintf(opcodeStr, opcodeSize, "PopEnv");
+            if ((instr & 0x00FFFFFF) == 0xF00000) {
+                snprintf(operandStr, operandSize, "[exit]");
+            } else {
+                int32_t offset = instrJumpOffset(instr);
+                uint32_t target = (uint32_t) ((int32_t) instrAddr + offset);
+                snprintf(operandStr, operandSize, "(target: L_%04X, offset: %+d)", target, offset);
+            }
+            break;
+        }
+
+        // Function call
+        case OP_CALL: {
+            snprintf(opcodeStr, opcodeSize, "Call.i");
+            int32_t argCount = instr & 0xFFFF;
+            uint32_t funcIdx = resolveFuncOperand(ctx, extraData);
+            const char* funcName = (dw->func.functionCount > funcIdx) ? dw->func.functions[funcIdx].name : "???";
+            snprintf(operandStr, operandSize, "%s(%d)", funcName, argCount);
+            if (argCount > 0) {
+                char argList[128] = "";
+                int32_t pos = 0;
+                for (int32_t i = 0; 8 > i && argCount > i; i++) {
+                    if (i > 0) pos += snprintf(argList + pos, sizeof(argList) - pos, ", ");
+                    pos += snprintf(argList + pos, sizeof(argList) - pos, "arg%d", i);
+                }
+                if (argCount > 8) snprintf(argList + pos, sizeof(argList) - pos, ", ...");
+                snprintf(commentStr, commentSize, "// pops: [%s] -> pushes: [result]", argList);
+            } else {
+                snprintf(commentStr, commentSize, "// pushes: [result]");
+            }
+            break;
+        }
+
+        // Duplicate stack items
+        case OP_DUP: {
+            uint8_t extra = (uint8_t) (instr & 0xFF);
+            int32_t count = (int32_t) extra + 1;
+            snprintf(opcodeStr, opcodeSize, "Dup.%c", gmlTypeChar(type1));
+            if (count > 1) {
+                snprintf(operandStr, operandSize, "%d", count);
+                snprintf(commentStr, commentSize, "// duplicates %d items", count);
+            } else {
+                snprintf(commentStr, commentSize, "// duplicates top item");
+            }
+            break;
+        }
+
+        // Control flow
+        case OP_RET:
+            snprintf(opcodeStr, opcodeSize, "Ret.%c", gmlTypeChar(type1));
+            snprintf(commentStr, commentSize, "// pops: [value] (return)");
+            break;
+        case OP_EXIT:
+            snprintf(opcodeStr, opcodeSize, "Exit.%c", gmlTypeChar(type1));
+            snprintf(commentStr, commentSize, "// (end of code)");
+            break;
+        case OP_POPZ:
+            snprintf(opcodeStr, opcodeSize, "Popz.%c", gmlTypeChar(type1));
+            snprintf(commentStr, commentSize, "// pops: [value]");
+            break;
+
+        // Debug break
+        case OP_BREAK:
+            snprintf(opcodeStr, opcodeSize, "Break.%c", gmlTypeChar(type1));
+            snprintf(operandStr, operandSize, "%d", (int32_t) instType);
+            break;
+
+        default:
+            snprintf(opcodeStr, opcodeSize, "??? (0x%02X)", opcode);
+            break;
+    }
+}
+
 void VM_buildCrossReferences(VMContext* ctx) {
     DataWin* dw = ctx->dataWin;
     ctx->crossRefMap = nullptr;
@@ -2120,9 +2394,6 @@ void VM_disassemble(VMContext* ctx, int32_t codeIndex) {
         }
 
         uint8_t opcode = instrOpcode(instr);
-        uint8_t type1 = instrType1(instr);
-        uint8_t type2 = instrType2(instr);
-        int16_t instType = instrInstanceType(instr);
 
         // PopEnv decreases depth before printing
         if (opcode == OP_POPENV && envDepth > 0) envDepth--;
@@ -2137,258 +2408,7 @@ void VM_disassemble(VMContext* ctx, int32_t codeIndex) {
         char operandStr[256] = "";
         char commentStr[128] = "";
 
-        switch (opcode) {
-            // Binary arithmetic/logic
-            case OP_ADD: case OP_SUB: case OP_MUL: case OP_DIV:
-            case OP_REM: case OP_MOD: case OP_AND: case OP_OR:
-            case OP_XOR: case OP_SHL: case OP_SHR:
-                snprintf(opcodeStr, sizeof(opcodeStr), "%s.%c.%c", opcodeName(opcode), gmlTypeChar(type1), gmlTypeChar(type2));
-                snprintf(commentStr, sizeof(commentStr), "// pops: [a, b] -> pushes: [result]");
-                break;
-
-            // Unary
-            case OP_NEG:
-                snprintf(opcodeStr, sizeof(opcodeStr), "Neg.%c", gmlTypeChar(type1));
-                snprintf(commentStr, sizeof(commentStr), "// pops: [a] -> pushes: [result]");
-                break;
-            case OP_NOT:
-                snprintf(opcodeStr, sizeof(opcodeStr), "Not.%c", gmlTypeChar(type1));
-                if (type1 == GML_TYPE_BOOL) {
-                    snprintf(commentStr, sizeof(commentStr), "// pops: [a] -> pushes: [bool] (logical NOT)");
-                } else {
-                    snprintf(commentStr, sizeof(commentStr), "// pops: [a] -> pushes: [int] (bitwise NOT)");
-                }
-                break;
-
-            // Type conversion
-            case OP_CONV:
-                snprintf(opcodeStr, sizeof(opcodeStr), "Conv.%c.%c", gmlTypeChar(type1), gmlTypeChar(type2));
-                snprintf(commentStr, sizeof(commentStr), "// pops: [%c] -> pushes: [%c]", gmlTypeChar(type2), gmlTypeChar(type1));
-                break;
-
-            // Comparison
-            case OP_CMP:
-                snprintf(opcodeStr, sizeof(opcodeStr), "Cmp.%c.%c", gmlTypeChar(type1), gmlTypeChar(type2));
-                snprintf(operandStr, sizeof(operandStr), "%s", cmpKindName(instrCmpKind(instr)));
-                snprintf(commentStr, sizeof(commentStr), "// pops: [a, b] -> pushes: [bool]");
-                break;
-
-            // Push
-            case OP_PUSH: {
-                switch (type1) {
-                    case GML_TYPE_DOUBLE:
-                        snprintf(opcodeStr, sizeof(opcodeStr), "Push.d");
-                        snprintf(operandStr, sizeof(operandStr), "%g", readFloat64(extraData));
-                        snprintf(commentStr, sizeof(commentStr), "// pushes: [double]");
-                        break;
-                    case GML_TYPE_FLOAT:
-                        snprintf(opcodeStr, sizeof(opcodeStr), "Push.f");
-                        snprintf(operandStr, sizeof(operandStr), "%g", (double) readFloat32(extraData));
-                        snprintf(commentStr, sizeof(commentStr), "// pushes: [float]");
-                        break;
-                    case GML_TYPE_INT32:
-                        snprintf(opcodeStr, sizeof(opcodeStr), "Push.i");
-                        snprintf(operandStr, sizeof(operandStr), "%d", readInt32(extraData));
-                        snprintf(commentStr, sizeof(commentStr), "// pushes: [int32]");
-                        break;
-                    case GML_TYPE_INT64:
-                        snprintf(opcodeStr, sizeof(opcodeStr), "Push.l");
-                        snprintf(operandStr, sizeof(operandStr), "%lld", (long long) readInt64(extraData));
-                        snprintf(commentStr, sizeof(commentStr), "// pushes: [int64]");
-                        break;
-                    case GML_TYPE_BOOL:
-                        snprintf(opcodeStr, sizeof(opcodeStr), "Push.b");
-                        snprintf(operandStr, sizeof(operandStr), "%s", readInt32(extraData) != 0 ? "true" : "false");
-                        snprintf(commentStr, sizeof(commentStr), "// pushes: [bool]");
-                        break;
-                    case GML_TYPE_STRING: {
-                        snprintf(opcodeStr, sizeof(opcodeStr), "Push.s");
-                        int32_t strIdx = readInt32(extraData);
-                        if (strIdx >= 0 && dw->strg.count > (uint32_t) strIdx) {
-                            const char* str = dw->strg.strings[strIdx];
-                            if (strlen(str) > 60) {
-                                snprintf(operandStr, sizeof(operandStr), "\"%.57s...\"", str);
-                            } else {
-                                snprintf(operandStr, sizeof(operandStr), "\"%s\"", str);
-                            }
-                        } else {
-                            snprintf(operandStr, sizeof(operandStr), "[string:%d]", strIdx);
-                        }
-                        snprintf(commentStr, sizeof(commentStr), "// pushes: [string]");
-                        break;
-                    }
-                    case GML_TYPE_VARIABLE:
-                        snprintf(opcodeStr, sizeof(opcodeStr), "Push.v");
-                        disasmFormatVar(ctx, extraData, nullptr, (int32_t) instType, operandStr, sizeof(operandStr));
-                        disasmFormatVarComment(ctx, extraData, false, commentStr, sizeof(commentStr));
-                        break;
-                    case GML_TYPE_INT16:
-                        snprintf(opcodeStr, sizeof(opcodeStr), "Push.e");
-                        snprintf(operandStr, sizeof(operandStr), "%d", (int32_t) instType);
-                        snprintf(commentStr, sizeof(commentStr), "// pushes: [int16]");
-                        break;
-                    default:
-                        snprintf(opcodeStr, sizeof(opcodeStr), "Push.?");
-                        snprintf(operandStr, sizeof(operandStr), "(unknown type 0x%X)", type1);
-                        break;
-                }
-                break;
-            }
-
-            // Scoped pushes
-            case OP_PUSHLOC:
-                snprintf(opcodeStr, sizeof(opcodeStr), "PushLoc.v");
-                disasmFormatVar(ctx, extraData, "local", (int32_t) instType, operandStr, sizeof(operandStr));
-                disasmFormatVarComment(ctx, extraData, false, commentStr, sizeof(commentStr));
-                break;
-            case OP_PUSHGLB:
-                snprintf(opcodeStr, sizeof(opcodeStr), "PushGlb.v");
-                disasmFormatVar(ctx, extraData, "global", (int32_t) instType, operandStr, sizeof(operandStr));
-                disasmFormatVarComment(ctx, extraData, false, commentStr, sizeof(commentStr));
-                break;
-            case OP_PUSHBLTN:
-                snprintf(opcodeStr, sizeof(opcodeStr), "PushBltn.v");
-                disasmFormatVar(ctx, extraData, nullptr, (int32_t) instType, operandStr, sizeof(operandStr));
-                disasmFormatVarComment(ctx, extraData, false, commentStr, sizeof(commentStr));
-                break;
-
-            // PushI (int16 immediate)
-            case OP_PUSHI:
-                snprintf(opcodeStr, sizeof(opcodeStr), "PushI.e");
-                snprintf(operandStr, sizeof(operandStr), "%d", (int32_t) instType);
-                snprintf(commentStr, sizeof(commentStr), "// pushes: [int16]");
-                break;
-
-            // Pop (store to variable)
-            case OP_POP:
-                snprintf(opcodeStr, sizeof(opcodeStr), "Pop.%c.%c", gmlTypeChar(type1), gmlTypeChar(type2));
-                disasmFormatVar(ctx, extraData, nullptr, (int32_t) instType, operandStr, sizeof(operandStr));
-                disasmFormatVarComment(ctx, extraData, true, commentStr, sizeof(commentStr));
-                break;
-
-            // Unconditional branch
-            case OP_B: {
-                snprintf(opcodeStr, sizeof(opcodeStr), "B");
-                int32_t offset = instrJumpOffset(instr);
-                uint32_t target = (uint32_t) ((int32_t) instrAddr + offset);
-                snprintf(operandStr, sizeof(operandStr), "L_%04X (offset: %+d)", target, offset);
-                break;
-            }
-
-            // Conditional branches
-            case OP_BT: {
-                snprintf(opcodeStr, sizeof(opcodeStr), "BT");
-                int32_t offset = instrJumpOffset(instr);
-                uint32_t target = (uint32_t) ((int32_t) instrAddr + offset);
-                snprintf(operandStr, sizeof(operandStr), "L_%04X (offset: %+d)", target, offset);
-                snprintf(commentStr, sizeof(commentStr), "// pops: [bool]");
-                break;
-            }
-            case OP_BF: {
-                snprintf(opcodeStr, sizeof(opcodeStr), "BF");
-                int32_t offset = instrJumpOffset(instr);
-                uint32_t target = (uint32_t) ((int32_t) instrAddr + offset);
-                snprintf(operandStr, sizeof(operandStr), "L_%04X (offset: %+d)", target, offset);
-                snprintf(commentStr, sizeof(commentStr), "// pops: [bool]");
-                break;
-            }
-
-            // With-statement: PushEnv
-            case OP_PUSHENV: {
-                snprintf(opcodeStr, sizeof(opcodeStr), "PushEnv");
-                int32_t offset = instrJumpOffset(instr);
-                uint32_t target = (uint32_t) ((int32_t) instrAddr + offset);
-                // Peek at previous instruction to identify the target object
-                const char* targetName = nullptr;
-                if (instrAddr >= 4) {
-                    uint32_t prevInstr = readUint32(bytecodeBase + instrAddr - 4);
-                    if (instrOpcode(prevInstr) == OP_PUSHI) {
-                        int16_t objIdx = (int16_t) (prevInstr & 0xFFFF);
-                        targetName = disasmScopeName(ctx, (int32_t) objIdx);
-                    }
-                }
-                if (targetName != nullptr) {
-                    snprintf(operandStr, sizeof(operandStr), "%s (target: L_%04X, offset: %+d)", targetName, target, offset);
-                } else {
-                    snprintf(operandStr, sizeof(operandStr), "(target: L_%04X, offset: %+d)", target, offset);
-                }
-                snprintf(commentStr, sizeof(commentStr), "// pops: [target]");
-                break;
-            }
-
-            // With-statement: PopEnv
-            case OP_POPENV: {
-                snprintf(opcodeStr, sizeof(opcodeStr), "PopEnv");
-                if ((instr & 0x00FFFFFF) == 0xF00000) {
-                    snprintf(operandStr, sizeof(operandStr), "[exit]");
-                } else {
-                    int32_t offset = instrJumpOffset(instr);
-                    uint32_t target = (uint32_t) ((int32_t) instrAddr + offset);
-                    snprintf(operandStr, sizeof(operandStr), "(target: L_%04X, offset: %+d)", target, offset);
-                }
-                break;
-            }
-
-            // Function call
-            case OP_CALL: {
-                snprintf(opcodeStr, sizeof(opcodeStr), "Call.i");
-                int32_t argCount = instr & 0xFFFF;
-                uint32_t funcIdx = resolveFuncOperand(ctx, extraData);
-                const char* funcName = (dw->func.functionCount > funcIdx) ? dw->func.functions[funcIdx].name : "???";
-                snprintf(operandStr, sizeof(operandStr), "%s(%d)", funcName, argCount);
-                if (argCount > 0) {
-                    char argList[128] = "";
-                    int32_t pos = 0;
-                    for (int32_t i = 0; 8 > i && argCount > i; i++) {
-                        if (i > 0) pos += snprintf(argList + pos, sizeof(argList) - pos, ", ");
-                        pos += snprintf(argList + pos, sizeof(argList) - pos, "arg%d", i);
-                    }
-                    if (argCount > 8) snprintf(argList + pos, sizeof(argList) - pos, ", ...");
-                    snprintf(commentStr, sizeof(commentStr), "// pops: [%s] -> pushes: [result]", argList);
-                } else {
-                    snprintf(commentStr, sizeof(commentStr), "// pushes: [result]");
-                }
-                break;
-            }
-
-            // Duplicate stack items
-            case OP_DUP: {
-                uint8_t extra = (uint8_t) (instr & 0xFF);
-                int32_t count = (int32_t) extra + 1;
-                snprintf(opcodeStr, sizeof(opcodeStr), "Dup.%c", gmlTypeChar(type1));
-                if (count > 1) {
-                    snprintf(operandStr, sizeof(operandStr), "%d", count);
-                    snprintf(commentStr, sizeof(commentStr), "// duplicates %d items", count);
-                } else {
-                    snprintf(commentStr, sizeof(commentStr), "// duplicates top item");
-                }
-                break;
-            }
-
-            // Control flow
-            case OP_RET:
-                snprintf(opcodeStr, sizeof(opcodeStr), "Ret.%c", gmlTypeChar(type1));
-                snprintf(commentStr, sizeof(commentStr), "// pops: [value] (return)");
-                break;
-            case OP_EXIT:
-                snprintf(opcodeStr, sizeof(opcodeStr), "Exit.%c", gmlTypeChar(type1));
-                snprintf(commentStr, sizeof(commentStr), "// (end of code)");
-                break;
-            case OP_POPZ:
-                snprintf(opcodeStr, sizeof(opcodeStr), "Popz.%c", gmlTypeChar(type1));
-                snprintf(commentStr, sizeof(commentStr), "// pops: [value]");
-                break;
-
-            // Debug break
-            case OP_BREAK:
-                snprintf(opcodeStr, sizeof(opcodeStr), "Break.%c", gmlTypeChar(type1));
-                snprintf(operandStr, sizeof(operandStr), "%d", (int32_t) instType);
-                break;
-
-            default:
-                snprintf(opcodeStr, sizeof(opcodeStr), "??? (0x%02X)", opcode);
-                break;
-        }
+        formatInstruction(ctx, bytecodeBase, instrAddr, instr, extraData, opcodeStr, sizeof(opcodeStr), operandStr, sizeof(operandStr), commentStr, sizeof(commentStr));
 
         // Print the formatted line
         if (commentStr[0] != '\0') {

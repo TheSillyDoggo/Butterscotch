@@ -112,6 +112,39 @@ static char* RValue_toStringFancy(RValue val) {
     }
 }
 
+// Converts an RValue to a heap-allocated string with a type tag prefix, used for trace-stack output.
+// Examples: int32(42), real(3.14), "hello", bool(true), undefined, <array_ref:5>
+// The caller must free the returned string
+static char* RValue_toStringTyped(RValue val) {
+    char buf[128];
+    switch (val.type) {
+        case RVALUE_REAL:
+            snprintf(buf, sizeof(buf), "real(%.16g)", val.real);
+            return strdup(buf);
+        case RVALUE_INT32:
+            snprintf(buf, sizeof(buf), "int32(%d)", val.int32);
+            return strdup(buf);
+        case RVALUE_INT64:
+            snprintf(buf, sizeof(buf), "int64(%lld)", (long long) val.int64);
+            return strdup(buf);
+        case RVALUE_STRING: {
+            const char* str = val.string != nullptr ? val.string : "";
+            size_t needed = strlen(str) + 3;
+            char* result = calloc(needed, sizeof(char));
+            snprintf(result, needed, "\"%s\"", str);
+            return result;
+        }
+        case RVALUE_BOOL:
+            return strdup(val.int32 ? "bool(true)" : "bool(false)");
+        case RVALUE_UNDEFINED:
+            return strdup("undefined");
+        case RVALUE_ARRAY_REF:
+            snprintf(buf, sizeof(buf), "<array_ref:%d>", val.int32);
+            return strdup(buf);
+    }
+    return strdup("???");
+}
+
 static void RValue_free(RValue* val) {
     if (val->type == RVALUE_STRING && val->ownsString && val->string != nullptr) {
         free((void*) val->string);
