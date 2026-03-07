@@ -32,6 +32,11 @@
 #define VARTYPE_NORMAL    0xA0
 #define VARTYPE_INSTANCE  0xE0
 
+// ===[ Scratch VarID for builtin array returns ]===
+// Used by builtins like layer_get_all() that need to return arrays.
+// Data is stored in globalArrayMap under this varID, and RVALUE_ARRAY_REF points here.
+#define BUILTIN_SCRATCH_VARID 99990
+
 // ===[ GML Math Epsilon (used for floating-point comparisons) ]===
 // The real GameMaker runner uses epsilon-based comparison for all numeric CMP operations.
 // Default value matches the HTML5 runner's g_GMLMathEpsilon.

@@ -423,8 +423,15 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
     // Check for array access
     if (access.isArray) {
         switch (instanceType) {
-            case INSTANCE_LOCAL:
+            case INSTANCE_LOCAL: {
+                // If the local scalar holds an RVALUE_ARRAY_REF (e.g., from a builtin that returned an array),
+                // follow the alias into the global array map
+                if (ctx->localVars != nullptr && ctx->localVarCount > (uint32_t) varDef->varID && ctx->localVars[varDef->varID].type == RVALUE_ARRAY_REF) {
+                    int32_t aliasVarID = ctx->localVars[varDef->varID].int32;
+                    return arrayMapGet(ctx->globalArrayMap, aliasVarID, access.arrayIndex);
+                }
                 return arrayMapGet(ctx->localArrayMap, varDef->varID, access.arrayIndex);
+            }
             case INSTANCE_GLOBAL: {
                 int32_t resolvedVarID = resolveArrayAlias(ctx->globalVars, ctx->globalVarCount, varDef->varID);
                 RValue result = arrayMapGet(ctx->globalArrayMap, resolvedVarID, access.arrayIndex);

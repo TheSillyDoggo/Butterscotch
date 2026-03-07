@@ -32,6 +32,8 @@ struct Renderer {
     int32_t drawFont;    // default -1 (no font)
     int32_t drawHalign;  // 0=left, 1=center, 2=right
     int32_t drawValign;  // 0=top, 1=middle, 2=bottom
+    int32_t displayWidth;   // monitor/display width in pixels
+    int32_t displayHeight;  // monitor/display height in pixels
 };
 
 // ===[ Shared Helpers (platform-agnostic) ]===

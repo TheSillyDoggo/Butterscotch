@@ -228,6 +228,98 @@ void Runner_executeEventForAll(Runner* runner, int32_t eventType, int32_t eventS
 
 // ===[ Background Scrolling & Drawing ]===
 
+// ===[ GMS2 Layer System ]===
+
+RuntimeLayer* Runner_findLayerById(Runner* runner, int32_t layerId) {
+    int32_t count = (int32_t) arrlen(runner->layers);
+    repeat(count, i) {
+        if (runner->layers[i]->id == layerId) return runner->layers[i];
+    }
+    return nullptr;
+}
+
+RuntimeLayerBgElement* Runner_findBgElementById(Runner* runner, int32_t elementId) {
+    int32_t layerCount = (int32_t) arrlen(runner->layers);
+    repeat(layerCount, i) {
+        RuntimeLayer* layer = runner->layers[i];
+        int32_t elemCount = (int32_t) arrlen(layer->bgElements);
+        repeat(elemCount, j) {
+            if (layer->bgElements[j].id == elementId) return &layer->bgElements[j];
+        }
+    }
+    return nullptr;
+}
+
+void Runner_clearLayers(Runner* runner) {
+    int32_t count = (int32_t) arrlen(runner->layers);
+    repeat(count, i) {
+        RuntimeLayer* layer = runner->layers[i];
+        arrfree(layer->bgElements);
+        free(layer->name);
+        free(layer);
+    }
+    arrfree(runner->layers);
+    runner->layers = nullptr;
+}
+
+void Runner_loadRoomLayers(Runner* runner, Room* room) {
+    Runner_clearLayers(runner);
+
+    // Track the highest layer/element ID to ensure new IDs don't collide
+    int32_t maxLayerId = runner->nextLayerId;
+    int32_t maxElemId = runner->nextElementId;
+
+    repeat(room->layerCount, i) {
+        RoomLayer* src = &room->layers[i];
+        RuntimeLayer* layer = calloc(1, sizeof(RuntimeLayer));
+        layer->id = (int32_t) src->id;
+        layer->name = strdup(src->name);
+        layer->depth = src->depth;
+        layer->x = src->xOffset;
+        layer->y = src->yOffset;
+        layer->hSpeed = src->hSpeed;
+        layer->vSpeed = src->vSpeed;
+        layer->visible = src->visible;
+        layer->type = (int32_t) src->type;
+        layer->bgElements = nullptr;
+
+        if (maxLayerId <= layer->id) maxLayerId = layer->id + 1;
+
+        // Create background elements
+        if (src->backgroundData != nullptr) {
+            RoomLayerBackground* bg = src->backgroundData;
+            RuntimeLayerBgElement elem = {0};
+            elem.id = maxElemId++;
+            elem.layerId = layer->id;
+            elem.visible = bg->visible;
+            elem.foreground = bg->foreground;
+            elem.spriteIndex = bg->spriteIndex;
+            elem.hTiled = bg->hTiled;
+            elem.vTiled = bg->vTiled;
+            elem.stretch = bg->stretch;
+            elem.color = bg->color;
+            elem.alpha = 1.0f;
+            elem.xScale = 1.0f;
+            elem.yScale = 1.0f;
+            arrput(layer->bgElements, elem);
+        }
+
+        arrput(runner->layers, layer);
+    }
+
+    runner->nextLayerId = maxLayerId;
+    runner->nextElementId = maxElemId;
+
+    if (room->layerCount > 0) {
+        int32_t bgLayerCount = 0;
+        int32_t totalLayers = (int32_t) arrlen(runner->layers);
+        repeat(totalLayers, i) {
+            if (arrlen(runner->layers[i]->bgElements) > 0) bgLayerCount++;
+        }
+        fprintf(stderr, "Runner: Loaded %d layers (%d with background elements) for room %s\n", totalLayers, bgLayerCount, room->name);
+    }
+}
+
 void Runner_scrollBackgrounds(Runner* runner) {
     repeat(8, i) {
         RuntimeBackground* bg = &runner->backgrounds[i];
@@ -268,7 +360,7 @@ void Runner_drawBackgrounds(Runner* runner, bool foreground) {
 
 // ===[ Draw ]===
 
-typedef enum { DRAWABLE_TILE, DRAWABLE_INSTANCE } DrawableType;
+typedef enum { DRAWABLE_TILE, DRAWABLE_INSTANCE, DRAWABLE_LAYER_BG } DrawableType;
 
 typedef struct {
     DrawableType type;
@@ -276,6 +368,7 @@ typedef struct {
     union {
         Instance* instance;
         int32_t tileIndex; // index into currentRoom->tiles
+        int32_t layerIndex; // index into runner->layers
     };
 } Drawable;
 
@@ -303,6 +396,43 @@ static int compareInstanceDepth(const void* a, const void* b) {
 static void fireDrawSubtype(Runner* runner, Instance** drawList, int32_t drawCount, int32_t subtype) {
     repeat(drawCount, i) {
         Runner_executeEvent(runner, drawList[i], EVENT_DRAW, subtype);
+    }
+}
+
+static void drawLayerBackground(Runner* runner, RuntimeLayer* layer) {
+    if (runner->renderer == nullptr) return;
+    if (!layer->visible) return;
+    DataWin* dataWin = runner->dataWin;
+    float roomW = (float) runner->currentRoom->width;
+    float roomH = (float) runner->currentRoom->height;
+
+    int32_t elemCount = (int32_t) arrlen(layer->bgElements);
+    repeat(elemCount, i) {
+        RuntimeLayerBgElement* elem = &layer->bgElements[i];
+        if (!elem->visible) continue;
+        if (0 > elem->spriteIndex) continue;
+
+        // Resolve sprite to TPAG (GMS2 backgrounds use sprites, not BGND)
+        int32_t tpagIndex = Renderer_resolveTPAGIndex(dataWin, elem->spriteIndex, 0);
+        if (0 > tpagIndex) continue;
+
+        // Extract color (strip alpha from ARGB)
+        uint32_t blendColor = elem->color & 0x00FFFFFF;
+        float alpha = elem->alpha;
+
+        float bgX = layer->x;
+        float bgY = layer->y;
+
+        if (elem->stretch) {
+            TexturePageItem* tpag = &dataWin->tpag.items[tpagIndex];
+            float xscale = roomW / (float) tpag->boundingWidth;
+            float yscale = roomH / (float) tpag->boundingHeight;
+            runner->renderer->vtable->drawSprite(runner->renderer, tpagIndex, 0.0f, 0.0f, 0.0f, 0.0f, xscale, yscale, 0.0f, blendColor, alpha);
+        } else if (elem->hTiled || elem->vTiled) {
+            Renderer_drawBackgroundTiled(runner->renderer, tpagIndex, bgX, bgY, elem->hTiled, elem->vTiled, roomW, roomH);
+        } else {
+            runner->renderer->vtable->drawSprite(runner->renderer, tpagIndex, bgX, bgY, 0.0f, 0.0f, elem->xScale, elem->yScale, 0.0f, blendColor, alpha);
+        }
     }
 }
 
@@ -351,6 +481,26 @@ void Runner_draw(Runner* runner) {
         arrput(drawables, d);
     }
 
+    // Add GMS2 layer backgrounds as drawables
+    int32_t layerCount = (int32_t) arrlen(runner->layers);
+    repeat(layerCount, i) {
+        RuntimeLayer* layer = runner->layers[i];
+        if (!layer->visible) continue;
+        if (arrlen(layer->bgElements) == 0) continue;
+        // Only add layers that have visible background elements with valid sprites
+        bool hasVisibleBg = false;
+        int32_t bgCount = (int32_t) arrlen(layer->bgElements);
+        repeat(bgCount, j) {
+            if (layer->bgElements[j].visible && layer->bgElements[j].spriteIndex >= 0) {
+                hasVisibleBg = true;
+                break;
+            }
+        }
+        if (!hasVisibleBg) continue;
+        Drawable d = { .type = DRAWABLE_LAYER_BG, .depth = layer->depth, .layerIndex = (int32_t) i };
+        arrput(drawables, d);
+    }
+
     // Sort all drawables by depth
     int32_t drawableCount = (int32_t) arrlen(drawables);
     if (drawableCount > 1) {
@@ -395,6 +545,10 @@ void Runner_draw(Runner* runner) {
                 }
 
                 Renderer_drawTile(runner->renderer, tile, offsetX, offsetY);
+            }
+        } else if (d->type == DRAWABLE_LAYER_BG) {
+            if (runner->renderer != nullptr && d->layerIndex < (int32_t) arrlen(runner->layers)) {
+                drawLayerBackground(runner, runner->layers[d->layerIndex]);
             }
         } else {
             Instance* inst = d->instance;
@@ -517,6 +671,9 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
     // Reset tile layer state for the new room
     hmfree(runner->tileLayerMap);
     runner->tileLayerMap = nullptr;
+
+    // Load GMS2 layers from room data (if present)
+    Runner_loadRoomLayers(runner, room);
 
     // Copy room background definitions into mutable runtime state
     runner->backgroundColor = room->backgroundColor;
@@ -1622,6 +1779,7 @@ void Runner_free(Runner* runner) {
     }
 
     hmfree(runner->tileLayerMap);
+    Runner_clearLayers(runner);
     RunnerKeyboard_free(runner->keyboard);
     free(runner);
 }

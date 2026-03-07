@@ -52,6 +52,38 @@ typedef struct {
     bool stretch;
 } RuntimeBackground;
 
+// ===[ GMS2 Layer System ]===
+
+// Background element on a layer
+typedef struct {
+    int32_t id;          // unique element ID
+    int32_t layerId;     // owning layer ID
+    bool visible;
+    bool foreground;
+    int32_t spriteIndex; // into SPRT (-1 = none)
+    bool hTiled;
+    bool vTiled;
+    bool stretch;
+    uint32_t color;      // blend color (ARGB)
+    float alpha;
+    float xScale;
+    float yScale;
+} RuntimeLayerBgElement;
+
+// A runtime layer (GMS2 layer system)
+typedef struct {
+    int32_t id;
+    char* name;          // owned, heap-allocated
+    int32_t depth;
+    float x, y;
+    float hSpeed, vSpeed;
+    bool visible;
+    int32_t type;        // LAYER_TYPE_* from data_win.h
+
+    // Background elements on this layer (stb_ds dynamic array)
+    RuntimeLayerBgElement* bgElements;
+} RuntimeLayer;
+
 typedef struct {
     bool visible;
     float offsetX;
@@ -96,6 +128,11 @@ typedef struct Runner {
     bool debugMode;
     TileLayerMapEntry* tileLayerMap; // stb_ds hashmap: depth -> tile layer state
     SavedRoomState* savedRoomStates; // array of size dataWin->room.count, for persistent room support
+
+    // GMS2 Layer system
+    RuntimeLayer** layers;     // stb_ds array of RuntimeLayer*
+    int32_t nextLayerId;       // counter for generating unique layer IDs
+    int32_t nextElementId;     // counter for generating unique element IDs
 } Runner;
 
 const char* Runner_getEventName(int32_t eventType, int32_t eventSubtype);
@@ -114,3 +151,9 @@ void Runner_cleanupDestroyedInstances(Runner* runner);
 void Runner_dumpState(Runner* runner);
 char* Runner_dumpStateJson(Runner* runner);
 void Runner_free(Runner* runner);
+
+// GMS2 Layer system helpers
+RuntimeLayer* Runner_findLayerById(Runner* runner, int32_t layerId);
+RuntimeLayerBgElement* Runner_findBgElementById(Runner* runner, int32_t elementId);
+void Runner_clearLayers(Runner* runner);
+void Runner_loadRoomLayers(Runner* runner, Room* room);

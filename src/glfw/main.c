@@ -1,5 +1,6 @@
 #include "data_win.h"
 #include "vm.h"
+#include "vm_builtins.h"
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -350,6 +351,7 @@ int main(int argc, char* argv[]) {
 
     printf("Loading %s...\n", args.dataWinPath);
 
+    VMBuiltins_setWorkingDirectory(args.dataWinPath);
     DataWin* dataWin = DataWin_parse(args.dataWinPath);
 
     Gen8* gen8 = &dataWin->gen8;
@@ -484,6 +486,11 @@ int main(int argc, char* argv[]) {
     Renderer* renderer = GLRenderer_create();
     renderer->vtable->init(renderer, dataWin);
     runner->renderer = renderer;
+
+    // Store display/monitor resolution
+    const GLFWvidmode* vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+    renderer->displayWidth = vidMode->width;
+    renderer->displayHeight = vidMode->height;
 
     // Set up keyboard input
     glfwSetWindowUserPointer(window, runner);

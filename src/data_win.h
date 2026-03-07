@@ -31,6 +31,8 @@ typedef struct {
     uint32_t debuggerPort;
     uint32_t roomOrderCount;
     int32_t* roomOrder;
+    // GMS2 extra fields (only present when major >= 2)
+    float gms2FPS; // 0 if not present (GMS 1.x)
 } Gen8;
 
 // ===[ OPTN - Options ]===
@@ -471,7 +473,51 @@ typedef struct {
     RoomGameObject* gameObjects;
     uint32_t tileCount;
     RoomTile* tiles;
+    // GMS2 layer data (parsed from room offset +88 when present)
+    uint32_t layerCount;
+    struct RoomLayer* layers;
 } Room;
+
+// ===[ GMS2 Room Layers ]===
+#define LAYER_TYPE_PATH       0
+#define LAYER_TYPE_BACKGROUND 1
+#define LAYER_TYPE_INSTANCES  2
+#define LAYER_TYPE_ASSETS     3
+#define LAYER_TYPE_TILES      4
+#define LAYER_TYPE_EFFECT     6
+
+typedef struct {
+    bool visible;
+    bool foreground;
+    int32_t spriteIndex; // into SPRT (-1 = none)
+    bool hTiled;
+    bool vTiled;
+    bool stretch;
+    uint32_t color;
+    float firstFrame;
+    float animSpeed;
+    uint32_t animSpeedType;
+} RoomLayerBackground;
+
+typedef struct {
+    uint32_t instanceCount;
+    uint32_t* instanceIds;
+} RoomLayerInstances;
+
+typedef struct RoomLayer {
+    const char* name;
+    uint32_t id;
+    uint32_t type;
+    int32_t depth;
+    float xOffset;
+    float yOffset;
+    float hSpeed;
+    float vSpeed;
+    bool visible;
+    // Type-specific data
+    RoomLayerBackground* backgroundData; // for LAYER_TYPE_BACKGROUND
+    RoomLayerInstances* instancesData;   // for LAYER_TYPE_INSTANCES
+} RoomLayer;
 
 typedef struct {
     uint32_t count;
