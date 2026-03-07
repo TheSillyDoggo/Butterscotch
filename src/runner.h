@@ -50,6 +50,7 @@ typedef struct {
     bool tileX, tileY;
     float speedX, speedY;
     bool stretch;
+    float alpha;
 } RuntimeBackground;
 
 typedef struct {

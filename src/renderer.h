@@ -149,7 +149,7 @@ static int32_t Renderer_resolveBackgroundTPAGIndex(DataWin* dataWin, int32_t bgn
 }
 
 // Draws a tiled background
-static void Renderer_drawBackgroundTiled(Renderer* renderer, int32_t tpagIndex, float bgX, float bgY, bool tileX, bool tileY, float roomW, float roomH) {
+static void Renderer_drawBackgroundTiled(Renderer* renderer, int32_t tpagIndex, float bgX, float bgY, bool tileX, bool tileY, float roomW, float roomH, float alpha) {
     DataWin* dw = renderer->dataWin;
     if (0 > tpagIndex || (uint32_t) tpagIndex >= dw->tpag.count) return;
 
@@ -181,7 +181,7 @@ static void Renderer_drawBackgroundTiled(Renderer* renderer, int32_t tpagIndex, 
 
     for (float dy = startY; endY > dy; dy += bgH) {
         for (float dx = startX; endX > dx; dx += bgW) {
-            renderer->vtable->drawSprite(renderer, tpagIndex, dx, dy, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0xFFFFFF, 1.0f);
+            renderer->vtable->drawSprite(renderer, tpagIndex, dx, dy, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0xFFFFFF, alpha);
             if (!tileX) break;
         }
         if (!tileY) break;

@@ -256,12 +256,12 @@ void Runner_drawBackgrounds(Runner* runner, bool foreground) {
             TexturePageItem* tpag = &dataWin->tpag.items[tpagIndex];
             float xscale = roomW / (float) tpag->boundingWidth;
             float yscale = roomH / (float) tpag->boundingHeight;
-            runner->renderer->vtable->drawSprite(runner->renderer, tpagIndex, 0.0f, 0.0f, 0.0f, 0.0f, xscale, yscale, 0.0f, 0xFFFFFF, 1.0f);
+            runner->renderer->vtable->drawSprite(runner->renderer, tpagIndex, 0.0f, 0.0f, 0.0f, 0.0f, xscale, yscale, 0.0f, 0xFFFFFF, bg->alpha);
         } else if (bg->tileX || bg->tileY) {
-            Renderer_drawBackgroundTiled(runner->renderer, tpagIndex, bg->x, bg->y, bg->tileX, bg->tileY, roomW, roomH);
+            Renderer_drawBackgroundTiled(runner->renderer, tpagIndex, bg->x, bg->y, bg->tileX, bg->tileY, roomW, roomH, bg->alpha);
         } else {
             // Single placement
-            runner->renderer->vtable->drawSprite(runner->renderer, tpagIndex, bg->x, bg->y, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0xFFFFFF, 1.0f);
+            runner->renderer->vtable->drawSprite(runner->renderer, tpagIndex, bg->x, bg->y, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0xFFFFFF, bg->alpha);
         }
     }
 }
@@ -534,6 +534,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
         dst->speedX = (float) src->speedX;
         dst->speedY = (float) src->speedY;
         dst->stretch = src->stretch;
+        dst->alpha = 1.0f;
     }
 
     // Handle persistent instances: keep persistent ones, free non-persistent

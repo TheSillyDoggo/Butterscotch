@@ -265,6 +265,10 @@ RValue VMBuiltins_getVariable(VMContext* ctx, const char* name, int32_t arrayInd
             }
             return RValue_makeReal(0.0);
         }
+        if (strcmp(name, "background_alpha") == 0) {
+            if (arrayIndex >= 0 && MAX_BACKGROUNDS > arrayIndex) return RValue_makeReal((double) runner->backgrounds[arrayIndex].alpha);
+            return RValue_makeReal(1.0);
+        }
         if (strcmp(name, "background_color") == 0 || strcmp(name, "background_colour") == 0) {
             return RValue_makeReal((double) runner->backgroundColor);
         }
@@ -449,6 +453,10 @@ void VMBuiltins_setVariable(VMContext* ctx, const char* name, RValue val, int32_
     }
     if (strcmp(name, "background_vspeed") == 0) {
         if (arrayIndex >= 0 && MAX_BACKGROUNDS > arrayIndex) runner->backgrounds[arrayIndex].speedY = (float) RValue_toReal(val);
+        return;
+    }
+    if (strcmp(name, "background_alpha") == 0) {
+        if (arrayIndex >= 0 && MAX_BACKGROUNDS > arrayIndex) runner->backgrounds[arrayIndex].alpha = (float) RValue_toReal(val);
         return;
     }
     if (strcmp(name, "background_color") == 0 || strcmp(name, "background_colour") == 0) {
