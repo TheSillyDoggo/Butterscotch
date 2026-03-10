@@ -15,6 +15,11 @@
 #include "gs_renderer.h"
 #include "utils.h"
 
+// The maximum memory of a normal PS2 console
+// Developer consoles may have more memory, but because ps2sdk does not have a way to know
+// how much memory the console really has, we will use this value instead
+static int MAX_MEMORY_BYTES = 33554432;
+
 // 256-byte aligned buffer for libpad
 static char padBuf[256] __attribute__((aligned(64)));
 
@@ -129,7 +134,7 @@ int main(int argc, char* argv[]) {
 
     {
         struct mallinfo mi = mallinfo();
-        printf("Memory after data.win parsing: used=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f, mi.fordblks, mi.fordblks / 1024.0f);
+        printf("Memory after data.win parsing: used=%d bytes (%.1f KB), total=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f, MAX_MEMORY_BYTES, MAX_MEMORY_BYTES / 1024.0f, MAX_MEMORY_BYTES - mi.uordblks, (MAX_MEMORY_BYTES - mi.uordblks) / 1024.0f);
     }
     // ===[ Create renderer and runner ]===
     Renderer* renderer = GsRenderer_create(gsGlobal);
@@ -139,7 +144,7 @@ int main(int argc, char* argv[]) {
 
     {
         struct mallinfo mi = mallinfo();
-        printf("Memory after VM and runner creation: used=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f, mi.fordblks, mi.fordblks / 1024.0f);
+        printf("Memory after VM and runner creation: used=%d bytes (%.1f KB), total=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f, MAX_MEMORY_BYTES, MAX_MEMORY_BYTES / 1024.0f, MAX_MEMORY_BYTES - mi.uordblks, (MAX_MEMORY_BYTES - mi.uordblks) / 1024.0f);
     }
 
     runner->renderer = renderer;
@@ -155,7 +160,7 @@ int main(int argc, char* argv[]) {
     // ===[ Main Loop ]===
     while (!runner->shouldExit) {
         struct mallinfo mi = mallinfo();
-        printf("Memory: used=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f, mi.fordblks, mi.fordblks / 1024.0f);
+        printf("Memory: used=%d bytes (%.1f KB), total=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f, MAX_MEMORY_BYTES, MAX_MEMORY_BYTES / 1024.0f, MAX_MEMORY_BYTES - mi.uordblks, (MAX_MEMORY_BYTES - mi.uordblks) / 1024.0f);
 
         // ===[ Poll Controller ]===
         RunnerKeyboard_beginFrame(runner->keyboard);
