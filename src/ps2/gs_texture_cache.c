@@ -8,6 +8,8 @@
 #include "stb_ds.h"
 #include <gsTexture.h>
 
+#include "utils.h"
+
 // ===[ Constants ]===
 #define GS_VRAM_SIZE (4 * 1024 * 1024)
 #define BTX_HEADER_SIZE 64
@@ -25,9 +27,8 @@
 // Build the tpagIndex -> file mapping by iterating all sprites and backgrounds.
 static void buildFileMap(GsTextureCache* cache, DataWin* dataWin) {
     // Map sprite frames
-    for (uint32_t si = 0; dataWin->sprt.count > si; si++) {
-        Sprite* sprite = &dataWin->sprt.sprites[si];
-        for (uint32_t fi = 0; sprite->textureCount > fi; fi++) {
+    forEachIndexed(Sprite, sprite, si, dataWin->sprt.sprites, dataWin->sprt.count) {
+        repeat(sprite->textureCount, fi) {
             int32_t tpagIndex = DataWin_resolveTPAG(dataWin, sprite->textureOffsets[fi]);
             if (0 > tpagIndex) continue;
 
@@ -41,9 +42,8 @@ static void buildFileMap(GsTextureCache* cache, DataWin* dataWin) {
     }
 
     // Map backgrounds
-    for (uint32_t bi = 0; dataWin->bgnd.count > bi; bi++) {
-        Background* bg = &dataWin->bgnd.backgrounds[bi];
-        int32_t tpagIndex = DataWin_resolveTPAG(dataWin, bg->textureOffset);
+    forEachIndexed(Background, background, bi, dataWin->bgnd.backgrounds, dataWin->bgnd.count) {
+        int32_t tpagIndex = DataWin_resolveTPAG(dataWin, background->textureOffset);
         if (0 > tpagIndex) continue;
 
         TpagFileMapping mapping = {
@@ -55,8 +55,7 @@ static void buildFileMap(GsTextureCache* cache, DataWin* dataWin) {
     }
 
     // Map font textures
-    for (uint32_t fi = 0; dataWin->font.count > fi; fi++) {
-        Font* font = &dataWin->font.fonts[fi];
+    forEachIndexed(Font, font, fi, dataWin->font.fonts, dataWin->font.count) {
         int32_t tpagIndex = DataWin_resolveTPAG(dataWin, font->textureOffset);
         if (0 > tpagIndex) continue;
 
@@ -127,7 +126,7 @@ static void evictAll(GsTextureCache* cache) {
     printf("GsTextureCache: Evicting all textures (frame=%lu)\n", (unsigned long) cache->currentFrame);
 
     // Mark all entries as unloaded
-    for (ptrdiff_t i = 0; arrlen(cache->entries) > i; i++) {
+    repeat(arrlen(cache->entries), i) {
         cache->entries[i].loaded = false;
         cache->entries[i].gsTexture.Vram = 0;
         cache->entries[i].gsTexture.VramClut = 0;
@@ -232,8 +231,7 @@ GSTEXTURE* GsTextureCache_get(GsTextureCache* cache, int32_t tpagIndex) {
     // Check if it fits in the total VRAM budget
     uint32_t vramBudget = GS_VRAM_SIZE - cache->vramBase;
     if (totalVramSize > vramBudget) {
-        fprintf(stderr, "GsTextureCache: Texture %s (%dx%d, %lu bytes) exceeds VRAM budget (%lu bytes), skipping\n",
-                path, paddedW, paddedH, (unsigned long) totalVramSize, (unsigned long) vramBudget);
+        fprintf(stderr, "GsTextureCache: Texture %s (%dx%d, %lu bytes) exceeds VRAM budget (%lu bytes), skipping\n", path, paddedW, paddedH, (unsigned long) totalVramSize, (unsigned long) vramBudget);
         fclose(f);
         return nullptr;
     }
@@ -325,8 +323,7 @@ GSTEXTURE* GsTextureCache_get(GsTextureCache* cache, int32_t tpagIndex) {
     arrput(cache->entries, cached);
     hmput(cache->indexMap, tpagIndex, entryIdx);
 
-    printf("GsTextureCache: Loaded %s (%dx%d, %dbpp, %lu VRAM bytes)\n",
-           path, paddedW, paddedH, bpp, (unsigned long) totalVramSize);
+    printf("GsTextureCache: Loaded %s (%dx%d, %dbpp, %lu VRAM bytes)\n", path, paddedW, paddedH, bpp, (unsigned long) totalVramSize);
 
     return &cache->entries[entryIdx].gsTexture;
 }

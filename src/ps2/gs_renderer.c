@@ -26,8 +26,7 @@ static void gsInit(Renderer* renderer, DataWin* dataWin) {
     // Set alpha blend equation: (Cs - Cd) * As / 128 + Cd (standard src-over blend)
     gsKit_set_primalpha(gs->gsGlobal, GS_SETREG_ALPHA(0, 1, 0, 1, 0), 0);
 
-    printf("GsRenderer: initialized with %u sprites, %u TPAG items\n",
-           dataWin->sprt.count, dataWin->tpag.count);
+    printf("GsRenderer: initialized with %u sprites, %u TPAG items\n", dataWin->sprt.count, dataWin->tpag.count);
 }
 
 static void gsDestroy(Renderer* renderer) {
@@ -181,10 +180,7 @@ static void gsDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
     uint8_t a = (uint8_t) (alpha * 128.0f);
     u64 texColor = GS_SETREG_RGBAQ(r, g, b, a, 0x00);
 
-    gsKit_prim_sprite_texture(gs->gsGlobal, tex,
-        sx1, sy1, u0, v0,
-        sx2, sy2, u1, v1,
-        gs->zCounter, texColor);
+    gsKit_prim_sprite_texture(gs->gsGlobal, tex, sx1, sy1, u0, v0, sx2, sy2, u1, v1, gs->zCounter, texColor);
     gs->zCounter++;
 }
 
@@ -309,10 +305,7 @@ static void gsDrawText(Renderer* renderer, const char* text, float x, float y, f
                     float u1 = u0 + (float) glyph->sourceWidth;
                     float v1 = v0 + (float) glyph->sourceHeight;
 
-                    gsKit_prim_sprite_texture(gs->gsGlobal, fontTex,
-                        sx1, sy1, u0, v0,
-                        sx2, sy2, u1, v1,
-                        gs->zCounter, textColor);
+                    gsKit_prim_sprite_texture(gs->gsGlobal, fontTex, sx1, sy1, u0, v0, sx2, sy2, u1, v1, gs->zCounter, textColor);
                 } else {
                     // Fallback: colored rectangle
                     gsKit_prim_sprite(gs->gsGlobal, sx1, sy1, sx2, sy2, gs->zCounter, textColor);
