@@ -685,8 +685,8 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
         if (inst->persistent) {
             arrput(keptInstances, inst);
         } else {
-            Instance_free(inst);
             hmdel(runner->instancesToId, inst->instanceId);
+            Instance_free(inst);
         }
     }
     arrfree(runner->instances);
@@ -808,8 +808,8 @@ void Runner_cleanupDestroyedInstances(Runner* runner) {
         if (!inst->destroyed) {
             runner->instances[writeIdx++] = inst;
         } else {
-            Instance_free(inst);
             hmdel(runner->instancesToId, inst->instanceId);
+            Instance_free(inst);
         }
     }
     arrsetlen(runner->instances, writeIdx);
@@ -1301,8 +1301,8 @@ void Runner_step(Runner* runner) {
             // Free any previously saved instances (from an earlier visit)
             int32_t prevSavedCount = (int32_t) arrlen(state->instances);
             repeat(prevSavedCount, i) {
-                Instance_free(state->instances[i]);
                 hmdel(runner->instancesToId, state->instances[i]->instanceId);
+                Instance_free(state->instances[i]);
             }
             arrfree(state->instances);
             state->instances = nullptr;
@@ -1319,8 +1319,8 @@ void Runner_step(Runner* runner) {
                 } else if (inst->active) {
                     arrput(state->instances, inst);
                 } else {
-                    Instance_free(inst);
                     hmdel(runner->instancesToId, inst->instanceId);
+                    Instance_free(inst);
                 }
             }
             arrfree(runner->instances);
@@ -1770,8 +1770,8 @@ void Runner_free(Runner* runner) {
 
     // Free all instances
     repeat(arrlen(runner->instances), i) {
-        Instance_free(runner->instances[i]);
         hmdel(runner->instancesToId, runner->instances[i]->instanceId);
+        Instance_free(runner->instances[i]);
     }
     arrfree(runner->instances);
 
@@ -1781,8 +1781,8 @@ void Runner_free(Runner* runner) {
             SavedRoomState* state = &runner->savedRoomStates[i];
             int32_t savedCount = (int32_t) arrlen(state->instances);
             repeat(savedCount, j) {
-                Instance_free(state->instances[j]);
                 hmdel(runner->instancesToId, state->instances[i]->instanceId);
+                Instance_free(state->instances[j]);
             }
             arrfree(state->instances);
             hmfree(state->tileLayerMap);
