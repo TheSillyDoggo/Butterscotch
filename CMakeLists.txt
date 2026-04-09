@@ -23,7 +23,12 @@ file(GLOB SOURCES src/*.c)
 # Platform specific files builds
 file(GLOB PLATFORM_SOURCES src/${PLATFORM}/*.c)
 
-add_executable(butterscotch ${SOURCES} ${PLATFORM_SOURCES})
+if(PLATFORM STREQUAL "lib")
+    add_library(butterscotch SHARED ${SOURCES} ${PLATFORM_SOURCES})
+    set_target_properties(butterscotch PROPERTIES OUTPUT_NAME "butterscotch")
+else()
+    add_executable(butterscotch ${SOURCES} ${PLATFORM_SOURCES})
+endif()
 target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 # stb_ds
@@ -210,6 +215,23 @@ elseif(PLATFORM STREQUAL "ps2")
                 ${CMAKE_SOURCE_DIR}/ps2dev-headers/gcc-include
         )
     endif()
+elseif(PLATFORM STREQUAL "lib")
+    # Shared library platform
+
+    # stb_image (for software renderer texture decoding)
+    target_include_directories(butterscotch PUBLIC vendor/stb/image)
+
+    # Include the GLFW file system (pure POSIX, no GLFW dependency)
+    target_sources(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/glfw/glfw_file_system.c)
+    target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/glfw)
+
+    # Position-independent code (required for shared libraries)
+    set_target_properties(butterscotch PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+    # Hide all symbols by default, export only BUTTERSCOTCH_API functions
+    target_compile_options(butterscotch PRIVATE -fvisibility=hidden)
+
+    target_link_libraries(butterscotch m pthread dl)
 else()
     message(FATAL_ERROR "Unknown platform! ${PLATFORM}")
 endif()
