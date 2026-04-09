@@ -143,6 +143,8 @@ static void rasterizeTriangle(SoftwareRenderer* sw, SWVertex v0, SWVertex v1, SW
                 float cg = b0 * v0.g + b1 * v1.g + b2 * v2.g;
                 float cb = b0 * v0.b + b1 * v1.b + b2 * v2.b;
                 float ca = b0 * v0.a + b1 * v1.a + b2 * v2.a;
+                if (0.0f > ca) ca = 0.0f;
+                if (ca > 1.0f) ca = 1.0f;
 
                 uint8_t finalR, finalG, finalB, finalA;
 
