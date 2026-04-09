@@ -245,3 +245,192 @@ BUTTERSCOTCH_API void butterscotch_keyUp(ButterscotchContext* ctx, int32_t keyCo
     if (ctx == nullptr) return;
     RunnerKeyboard_onKeyUp(ctx->runner->keyboard, keyCode);
 }
+
+// ===[ CallbackAudioSystem ]===
+
+typedef struct {
+    AudioSystem base;
+    ButterscotchAudioCallbacks callbacks;
+} CallbackAudioSystem;
+
+static void callbackInit(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED DataWin* dataWin, MAYBE_UNUSED FileSystem* fileSystem) {}
+
+static void callbackDestroy(AudioSystem* audio) {
+    free(audio);
+}
+
+static void callbackUpdate(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED float deltaTime) {}
+
+static int32_t callbackPlaySound(AudioSystem* audio, int32_t soundIndex, MAYBE_UNUSED int32_t priority, bool loop) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.playSound != nullptr)
+        return cb->callbacks.playSound(cb->callbacks.userData, soundIndex, loop);
+    return -1;
+}
+
+static void callbackStopSound(AudioSystem* audio, int32_t soundOrInstance) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.stopSound != nullptr)
+        cb->callbacks.stopSound(cb->callbacks.userData, soundOrInstance);
+}
+
+static void callbackStopAll(AudioSystem* audio) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.stopAll != nullptr)
+        cb->callbacks.stopAll(cb->callbacks.userData);
+}
+
+static bool callbackIsPlaying(AudioSystem* audio, int32_t soundOrInstance) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.isPlaying != nullptr)
+        return cb->callbacks.isPlaying(cb->callbacks.userData, soundOrInstance);
+    return false;
+}
+
+static void callbackPauseSound(AudioSystem* audio, int32_t soundOrInstance) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.pauseSound != nullptr)
+        cb->callbacks.pauseSound(cb->callbacks.userData, soundOrInstance);
+}
+
+static void callbackResumeSound(AudioSystem* audio, int32_t soundOrInstance) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.resumeSound != nullptr)
+        cb->callbacks.resumeSound(cb->callbacks.userData, soundOrInstance);
+}
+
+static void callbackPauseAll(AudioSystem* audio) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.pauseAll != nullptr)
+        cb->callbacks.pauseAll(cb->callbacks.userData);
+}
+
+static void callbackResumeAll(AudioSystem* audio) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.resumeAll != nullptr)
+        cb->callbacks.resumeAll(cb->callbacks.userData);
+}
+
+static void callbackSetSoundGain(AudioSystem* audio, int32_t soundOrInstance, float gain, uint32_t timeMs) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.setSoundGain != nullptr)
+        cb->callbacks.setSoundGain(cb->callbacks.userData, soundOrInstance, gain, timeMs);
+}
+
+static float callbackGetSoundGain(AudioSystem* audio, int32_t soundOrInstance) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.getSoundGain != nullptr)
+        return cb->callbacks.getSoundGain(cb->callbacks.userData, soundOrInstance);
+    return 1.0f;
+}
+
+static void callbackSetSoundPitch(AudioSystem* audio, int32_t soundOrInstance, float pitch) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.setSoundPitch != nullptr)
+        cb->callbacks.setSoundPitch(cb->callbacks.userData, soundOrInstance, pitch);
+}
+
+static float callbackGetSoundPitch(AudioSystem* audio, int32_t soundOrInstance) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.getSoundPitch != nullptr)
+        return cb->callbacks.getSoundPitch(cb->callbacks.userData, soundOrInstance);
+    return 1.0f;
+}
+
+static float callbackGetTrackPosition(AudioSystem* audio, int32_t soundOrInstance) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.getTrackPosition != nullptr)
+        return cb->callbacks.getTrackPosition(cb->callbacks.userData, soundOrInstance);
+    return 0.0f;
+}
+
+static void callbackSetTrackPosition(AudioSystem* audio, int32_t soundOrInstance, float positionSeconds) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.setTrackPosition != nullptr)
+        cb->callbacks.setTrackPosition(cb->callbacks.userData, soundOrInstance, positionSeconds);
+}
+
+static void callbackSetMasterGain(AudioSystem* audio, float gain) {
+    CallbackAudioSystem* cb = (CallbackAudioSystem*) audio;
+    if (cb->callbacks.setMasterGain != nullptr)
+        cb->callbacks.setMasterGain(cb->callbacks.userData, gain);
+}
+
+static void callbackSetChannelCount(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED int32_t count) {}
+static void callbackGroupLoad(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED int32_t groupIndex) {}
+static bool callbackGroupIsLoaded(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED int32_t groupIndex) { return true; }
+static int32_t callbackCreateStream(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED const char* filename) { return -1; }
+static bool callbackDestroyStream(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED int32_t streamIndex) { return false; }
+
+static AudioSystemVtable callbackVtable = {
+    .init = callbackInit,
+    .destroy = callbackDestroy,
+    .update = callbackUpdate,
+    .playSound = callbackPlaySound,
+    .stopSound = callbackStopSound,
+    .stopAll = callbackStopAll,
+    .isPlaying = callbackIsPlaying,
+    .pauseSound = callbackPauseSound,
+    .resumeSound = callbackResumeSound,
+    .pauseAll = callbackPauseAll,
+    .resumeAll = callbackResumeAll,
+    .setSoundGain = callbackSetSoundGain,
+    .getSoundGain = callbackGetSoundGain,
+    .setSoundPitch = callbackSetSoundPitch,
+    .getSoundPitch = callbackGetSoundPitch,
+    .getTrackPosition = callbackGetTrackPosition,
+    .setTrackPosition = callbackSetTrackPosition,
+    .setMasterGain = callbackSetMasterGain,
+    .setChannelCount = callbackSetChannelCount,
+    .groupLoad = callbackGroupLoad,
+    .groupIsLoaded = callbackGroupIsLoaded,
+    .createStream = callbackCreateStream,
+    .destroyStream = callbackDestroyStream,
+};
+
+BUTTERSCOTCH_API void butterscotch_setAudioCallbacks(ButterscotchContext* ctx, ButterscotchAudioCallbacks* callbacks) {
+    if (ctx == nullptr || callbacks == nullptr) return;
+
+    // Destroy the current audio system
+    ctx->audioSystem->vtable->destroy(ctx->audioSystem);
+
+    // Build a new CallbackAudioSystem with the provided callbacks (copied by value)
+    CallbackAudioSystem* cb = calloc(1, sizeof(CallbackAudioSystem));
+    cb->base.vtable = &callbackVtable;
+    cb->callbacks = *callbacks;
+
+    ctx->audioSystem = (AudioSystem*) cb;
+    ctx->runner->audioSystem = ctx->audioSystem;
+}
+
+// ===[ Sound Info API ]===
+
+BUTTERSCOTCH_API int32_t butterscotch_getSoundCount(ButterscotchContext* ctx) {
+    if (ctx == nullptr) return 0;
+    return (int32_t) ctx->dataWin->sond.count;
+}
+
+BUTTERSCOTCH_API void butterscotch_getSoundInfo(ButterscotchContext* ctx, int32_t soundIndex, ButterscotchSoundInfo* outInfo) {
+    if (ctx == nullptr || outInfo == nullptr) return;
+    if (0 > soundIndex || soundIndex >= (int32_t) ctx->dataWin->sond.count) return;
+
+    Sound* snd = &ctx->dataWin->sond.sounds[soundIndex];
+    outInfo->name = snd->name;
+    outInfo->file = snd->file;
+    outInfo->isEmbedded = (snd->flags & 0x01) != 0;
+    outInfo->volume = snd->volume;
+    outInfo->pitch = snd->pitch;
+}
+
+BUTTERSCOTCH_API const uint8_t* butterscotch_getSoundData(ButterscotchContext* ctx, int32_t soundIndex, int32_t* outSize) {
+    if (outSize != nullptr) *outSize = 0;
+    if (ctx == nullptr) return nullptr;
+    if (0 > soundIndex || soundIndex >= (int32_t) ctx->dataWin->sond.count) return nullptr;
+
+    Sound* snd = &ctx->dataWin->sond.sounds[soundIndex];
+    if (0 > snd->audioFile || snd->audioFile >= (int32_t) ctx->dataWin->audo.count) return nullptr;
+
+    AudioEntry* entry = &ctx->dataWin->audo.entries[snd->audioFile];
+    if (outSize != nullptr) *outSize = (int32_t) entry->dataSize;
+    return entry->data;
+}
