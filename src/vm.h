@@ -35,8 +35,15 @@
 
 // ===[ GML Math Epsilon (used for floating-point comparisons) ]===
 // The real GameMaker runner uses epsilon-based comparison for all numeric CMP operations.
-// Default value matches the HTML5 runner's g_GMLMathEpsilon.
+// Default value matches the HTML5 runner's g_GMLMathEpsilon (1e-5 for double precision).
+// When using single-precision floats, we use 1e-4 to work around accumulated rounding errors from
+// non-IEEE FPUs (example: PS2's R5900 which rounds toward zero instead of round-to-nearest) can
+// exceed the default epsilon.
+#ifdef USE_FLOAT_REALS
+#define GML_MATH_EPSILON 1e-4
+#else
 #define GML_MATH_EPSILON 1e-5
+#endif
 
 // GMS 1.4 supports up to 16 arguments per script call
 #define GML_MAX_ARGUMENTS 16
