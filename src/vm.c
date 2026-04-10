@@ -1416,8 +1416,6 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
     uint32_t funcIndex = resolveFuncOperand(extraData);
     require(ctx->dataWin->func.functionCount > funcIndex);
 
-    const char* funcName = ctx->dataWin->func.functions[funcIndex].name;
-
     // Pop arguments from stack (args pushed right-to-left, so first arg is on top)
     // Use stack-allocated buffer for small arg counts (GMS 1.4 supports up to 16 arguments)
     RValue stackArgs[GML_MAX_ARGUMENTS];
@@ -1430,6 +1428,7 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
     }
 
 #ifndef DISABLE_VM_TRACING
+    const char* funcName = ctx->dataWin->func.functions[funcIndex].name;
     bool functionIsBeingTraced = shgeti(ctx->functionCallsToBeTraced, "*") != -1 || shgeti(ctx->functionCallsToBeTraced, funcName) != -1 || shgeti(ctx->functionCallsToBeTraced, ctx->currentCodeName) != -1;
     char* functionArgumentList = nullptr;
     if (functionIsBeingTraced) {
@@ -1453,9 +1452,12 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
     }
 #endif
 
-    // Check built-in functions first
-    BuiltinFunc builtin = VMBuiltins_find(funcName);
-    if (builtin != nullptr) {
+    // Use cached function resolution to avoid per-call string hash lookups
+    FuncCallCache* cache = &ctx->funcCallCache[funcIndex];
+
+    // Fast path: cached builtin function pointer
+    if (cache->builtin != nullptr) {
+        BuiltinFunc builtin = (BuiltinFunc) cache->builtin;
         RValue result = builtin(ctx, args, argCount);
         // Free arguments
         if (args != nullptr) {
@@ -1478,44 +1480,46 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
         return;
     }
 
-    // Look up script/user function via funcMap
-    ptrdiff_t mapIdx = shgeti(ctx->funcMap, (char*) funcName);
-    if (0 > mapIdx) {
-        // Log once per (callingCode, funcName) pair
-        const char* callerName = VM_getCallerName(ctx);
-        char* dedupKey = VM_createDedupKey(callerName, funcName);
+    // Fast path: cached script code index
+    if (cache->scriptCodeIndex >= 0) {
+        RValue result = VM_callCodeIndex(ctx, cache->scriptCodeIndex, args, argCount);
 
-        if (0 > shgeti(ctx->loggedUnknownFuncs, dedupKey)) {
-            shput(ctx->loggedUnknownFuncs, dedupKey, true);
-            fprintf(stderr, "VM: [%s] Unknown function \"%s\"!\n", callerName, funcName);
-        } else {
-            free(dedupKey);
+#ifndef DISABLE_VM_TRACING
+        if (functionIsBeingTraced) {
+            char* returnValueAsString = RValue_toStringFancy(result);
+            fprintf(stderr, "VM: [%s] Script function \"%s(%s)\" returned %s\n", ctx->currentCodeName, funcName, functionArgumentList, returnValueAsString);
+            free(returnValueAsString);
+            free(functionArgumentList);
         }
+#endif
 
-        // Free arguments and push undefined
+        // Free arguments (VM_callCodeIndex copies what it needs)
         if (args != nullptr) {
             repeat(argCount, i) {
                 RValue_free(&args[i]);
             }
             if (args != stackArgs) free(args);
         }
-        stackPush(ctx,RValue_makeUndefined());
+
+        stackPush(ctx,result);
         return;
     }
 
-    int32_t codeIndex = ctx->funcMap[mapIdx].value;
-    RValue result = VM_callCodeIndex(ctx, codeIndex, args, argCount);
+    // Slow path: unknown function (not cached as builtin or script)
+    const char* unknownFuncName = ctx->dataWin->func.functions[funcIndex].name;
 
-#ifndef DISABLE_VM_TRACING
-    if (functionIsBeingTraced) {
-        char* returnValueAsString = RValue_toStringFancy(result);
-        fprintf(stderr, "VM: [%s] Script function \"%s(%s)\" returned %s\n", ctx->currentCodeName, funcName, functionArgumentList, returnValueAsString);
-        free(returnValueAsString);
-        free(functionArgumentList);
+    // Log once per (callingCode, funcName) pair
+    const char* callerName = VM_getCallerName(ctx);
+    char* dedupKey = VM_createDedupKey(callerName, unknownFuncName);
+
+    if (0 > shgeti(ctx->loggedUnknownFuncs, dedupKey)) {
+        shput(ctx->loggedUnknownFuncs, dedupKey, true);
+        fprintf(stderr, "VM: [%s] Unknown function \"%s\"!\n", callerName, unknownFuncName);
+    } else {
+        free(dedupKey);
     }
-#endif
 
-    // Free arguments (VM_callCodeIndex copies what it needs)
+    // Free arguments and push undefined
     if (args != nullptr) {
         repeat(argCount, i) {
             RValue_free(&args[i]);
@@ -1523,8 +1527,13 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
         if (args != stackArgs) free(args);
     }
 
-    // Push return value
-    stackPush(ctx,result);
+#ifndef DISABLE_VM_TRACING
+    if (functionIsBeingTraced) {
+        free(functionArgumentList);
+    }
+#endif
+
+    stackPush(ctx,RValue_makeUndefined());
 }
 
 // ===[ With-Statement Helpers (PushEnv/PopEnv) ]===
@@ -1962,6 +1971,22 @@ VMContext* VM_create(DataWin* dataWin) {
 
     // Register built-in functions
     VMBuiltins_registerAll(dataWin->gen8.major >= 2);
+
+    // Pre-resolve all FUNC entries to cached builtin pointers or script code indices.
+    // This eliminates per-call string hash lookups in handleCall.
+    ctx->funcCallCacheCount = dataWin->func.functionCount;
+    ctx->funcCallCache = safeMalloc(dataWin->func.functionCount * sizeof(FuncCallCache));
+    repeat(dataWin->func.functionCount, i) {
+        const char* name = dataWin->func.functions[i].name;
+        BuiltinFunc builtin = VMBuiltins_find(name);
+        ctx->funcCallCache[i].builtin = (void*) builtin;
+        if (builtin != nullptr) {
+            ctx->funcCallCache[i].scriptCodeIndex = -1;
+        } else {
+            ptrdiff_t mapIdx = shgeti(ctx->funcMap, (char*) name);
+            ctx->funcCallCache[i].scriptCodeIndex = (mapIdx >= 0) ? ctx->funcMap[mapIdx].value : -1;
+        }
+    }
 
     fprintf(stderr, "VM: Initialized with %u global vars, sparse self vars (hashmap), %u functions mapped\n", ctx->globalVarCount, (uint32_t) shlen(ctx->funcMap));
 
@@ -2662,6 +2687,9 @@ void VM_free(VMContext* ctx) {
     shfree(ctx->opcodesToBeTraced);
     shfree(ctx->stackToBeTraced);
 #endif
+
+    // Free function call cache
+    free(ctx->funcCallCache);
 
     // Free cross-reference map
     if (ctx->crossRefMap != nullptr) {
