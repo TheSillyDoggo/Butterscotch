@@ -184,6 +184,31 @@ jobs:
           cmake --build build -j$(nproc)
           cp build/butterscotch build/butterscotch.elf
 
+      - name: Check executeLoop I-Cache fit
+        run: |
+          # Extract executeLoop function size from the ELF symbol table
+          # nm -S prints: address size type name
+          echo "Getting executeLoop size from ELF symbol table..."
+          SYMBOL_LINE=$(mips64r5900el-ps2-elf-nm -S build/butterscotch.elf | grep ' executeLoop$' || true)
+          if [ -z "$SYMBOL_LINE" ]; then
+            echo "::error::Could not find executeLoop symbol in ELF (is it stripped?)"
+            exit 1
+          fi
+          # Size is the second hex field
+          SIZE_HEX=$(echo "$SYMBOL_LINE" | awk '{print $2}')
+          SIZE_DEC=$((16#$SIZE_HEX))
+          LIMIT=16384
+          if [ "$SIZE_DEC" -gt "$LIMIT" ]; then
+            echo "::error::executeLoop is $SIZE_DEC bytes, exceeding the PS2 16 KB I-Cache ($LIMIT bytes) by $((SIZE_DEC - LIMIT)) bytes"
+            echo "| Function | Size | Limit | Status |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|------|-------|--------|" >> $GITHUB_STEP_SUMMARY
+            echo "| \`executeLoop\` | $SIZE_DEC bytes | $LIMIT bytes (16 KB) | **EXCEEDED** by $((SIZE_DEC - LIMIT)) bytes |" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "| Function | Size | Limit | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| \`executeLoop\` | $SIZE_DEC bytes | $LIMIT bytes (16 KB) | $((LIMIT - SIZE_DEC)) bytes remaining |" >> $GITHUB_STEP_SUMMARY
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

@@ -2250,8 +2250,9 @@ static RValue builtin_audioSoundSetTrackPosition(VMContext* ctx, RValue* args, M
 static RValue builtin_audioCreateStream(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     AudioSystem* audio = getAudioSystem(ctx);
     if (audio == nullptr) return RValue_makeReal(-1.0);
-    const char* filename = RValue_toString(args[0]);
+    char* filename = RValue_toString(args[0]);
     int32_t streamIndex = audio->vtable->createStream(audio, filename);
+    free(filename);
     return RValue_makeReal((GMLReal) streamIndex);
 }
 
@@ -4416,6 +4417,33 @@ static RValue builtinTileLayerShift(MAYBE_UNUSED VMContext* ctx, RValue* args, M
     return RValue_makeUndefined();
 }
 
+// ===[ Layer Functions ]===
+
+static RValue builtinLayerForceDrawDepth(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    runner->forceDrawDepth = RValue_toBool(args[0]);
+    runner->forcedDepth = RValue_toInt32(args[1]);
+    return RValue_makeUndefined();
+}
+
+static RValue builtinLayerIsDrawDepthForced(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    return RValue_makeBool(runner->forceDrawDepth);
+}
+
+static RValue builtinLayerGetForcedDepth(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    return RValue_makeReal((GMLReal) runner->forcedDepth);
+}
+
+// ===[ Array Functions ]===
+
+// @@NewGMLArray@@ - GMS2 internal function to create a new empty array.
+// In our VM, arrays are created implicitly on first write, so this is a no-op.
+static RValue builtinNewGMLArray(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    return RValue_makeUndefined();
+}
+
 // ===[ PATH FUNCTIONS ]===
 
 // path_start(path, speed, endaction, absolute) - HTML5: Assign_Path (yyInstance.js:2695-2743)
@@ -4693,13 +4721,16 @@ static RValue builtinAssetGetIndex(VMContext* ctx, RValue* args, int32_t argCoun
         return RValue_makeUndefined();
     }
 
-    const char* name = RValue_toString(args[0]);
+    char* name = RValue_toString(args[0]);
 
     repeat(ctx->dataWin->objt.count, i) {
-        if (strcmp(ctx->dataWin->objt.objects[i].name, name) == 0)
+        if (strcmp(ctx->dataWin->objt.objects[i].name, name) == 0) {
+            free(name);
             return RValue_makeReal((double) i);
+        }
     }
 
+    free(name);
     return RValue_makeReal((double) -1);
 }
 
@@ -5076,6 +5107,14 @@ void VMBuiltins_registerAll(bool isGMS2) {
     registerBuiltin("tile_layer_show", builtinTileLayerShow);
     registerBuiltin("tile_layer_shift", builtinTileLayerShift);
 
+    // Layer
+    registerBuiltin("layer_force_draw_depth", builtinLayerForceDrawDepth);
+    registerBuiltin("layer_is_draw_depth_forced", builtinLayerIsDrawDepthForced);
+    registerBuiltin("layer_get_forced_depth", builtinLayerGetForcedDepth);
+
+    // GMS2 internal
+    registerBuiltin("@@NewGMLArray@@", builtinNewGMLArray);
+
     // Path
     registerBuiltin("path_start", builtinPathStart);
     registerBuiltin("path_end", builtinPathEnd);
@@ -5093,4 +5132,33 @@ void VMBuiltins_registerAll(bool isGMS2) {
     registerBuiltin("font_add_sprite_ext", builtinFontAddSpriteExt);
     registerBuiltin("object_get_sprite", builtinObjectGetSprite);
     registerBuiltin("asset_get_index", builtinAssetGetIndex);
+}
+
+void VMBuiltins_free(void) {
+    // Free ds_map pool
+    repeat((int32_t) arrlen(dsMapPool), i) {
+        DsMapEntry* map = dsMapPool[i];
+        if (map != nullptr) {
+            repeat(shlen(map), j) {
+                free(map[j].key);
+                RValue_free(&map[j].value);
+            }
+            shfree(map);
+        }
+    }
+    arrfree(dsMapPool);
+
+    // Free ds_list pool
+    repeat((int32_t) arrlen(dsListPool), i) {
+        DsList* list = &dsListPool[i];
+        repeat(arrlen(list->items), j) {
+            RValue_free(&list->items[j]);
+        }
+        arrfree(list->items);
+    }
+    arrfree(dsListPool);
+
+    // Free builtin map
+    shfree(builtinMap);
+    initialized = false;
 }

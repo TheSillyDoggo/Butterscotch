@@ -179,6 +179,7 @@ static bool arrayMapHasVariable(ArrayMapEntry* map, int32_t varID) {
 // Read from an array map, returning default RValue_makeReal(0.0) if not found
 // Returns a non-owning copy: the array map retains ownership of any owned strings.
 static RValue arrayMapGet(ArrayMapEntry* map, int32_t varID, int32_t arrayIndex) {
+    if (map == nullptr) return RValue_makeReal(0.0); // We still need to check if returning 0.0 (real) is correct, but for now, this will do
     int64_t k = arrayMapKey(varID, arrayIndex);
     ptrdiff_t idx = hmgeti(map, k);
     if (0 > idx) return RValue_makeReal(0.0);
@@ -663,6 +664,8 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
         }
 #endif
 
+        // VMBuiltins_setVariable reads values (toReal, toInt32, etc.) but does not take ownership
+        RValue_free(&val);
         return;
     }
 
@@ -768,7 +771,8 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
                 free(rvalueAsString);
             }
 #endif
-            // val ownership transferred to Instance_setSelfVar, don't free here
+            // Instance_setSelfVar always copies strings, so free the original
+            RValue_free(&val);
             return;
         }
     }
@@ -2675,7 +2679,15 @@ void VM_free(VMContext* ctx) {
     // Free hash maps
     shfree(ctx->funcMap);
     shfree(ctx->globalVarNameMap);
+
+    // Free dedup key strings before freeing the hashmaps
+    for (ptrdiff_t i = 0; shlen(ctx->loggedUnknownFuncs) > i; i++) {
+        free(ctx->loggedUnknownFuncs[i].key);
+    }
     shfree(ctx->loggedUnknownFuncs);
+    for (ptrdiff_t i = 0; shlen(ctx->loggedStubbedFuncs) > i; i++) {
+        free(ctx->loggedStubbedFuncs[i].key);
+    }
     shfree(ctx->loggedStubbedFuncs);
 #ifndef DISABLE_VM_TRACING
     shfree(ctx->varReadsToBeTraced);

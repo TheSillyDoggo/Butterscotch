@@ -425,6 +425,7 @@ void Runner_draw(Runner* runner) {
             Drawable d = { .type = DRAWABLE_LAYER, .depth = layerDrawList[i]->depth, .layer = layerDrawList[i] };
             arrput(drawables, d);
         }
+        arrfree(layerDrawList);
     }
 
     // Sort all drawables by depth
@@ -492,8 +493,10 @@ void Runner_draw(Runner* runner) {
                 {
                     if (runner->renderer != nullptr) {
                         RoomTile* tile = &data->legacyTiles[i];
-                        float offsetX = 0.0f, offsetY = 0.0f;
+                        // Check if this tile's layer is hidden via tile_layer_hide()
                         ptrdiff_t layerIdx = hmgeti(runner->tileLayerMap, tile->tileDepth);
+                        if (layerIdx >= 0 && !runner->tileLayerMap[layerIdx].value.visible) continue;
+                        float offsetX = 0.0f, offsetY = 0.0f;
                         if (layerIdx >= 0) {
                             offsetX = runner->tileLayerMap[layerIdx].value.offsetX;
                             offsetY = runner->tileLayerMap[layerIdx].value.offsetY;
@@ -566,15 +569,8 @@ void Runner_draw(Runner* runner) {
                             runner->renderer->vtable->drawSprite(runner->renderer, tpagIndex, d->layer->xOffset, d->layer->yOffset, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0xFFFFFF, 1.0);
                         }
             } else if(d->layer->type == RoomLayerType_Instances) {
-                RoomLayerInstancesData *data = d->layer->instancesData;
-                // TODO: This isn't the right way to do this
-                repeat(data->instanceCount, i) {
-                    Instance* inst = hmget(runner->instancesToId, data->instanceIds[i]);
-                    if (inst == nullptr)
-                        continue;
-                    if(inst->depth == 0)
-                        inst->depth = d->layer->depth;
-                }
+                // Instance depth is assigned from layers during room init (initRoom).
+                // Nothing to do here - instances are drawn from the DRAWABLE_INSTANCE path.
             }
         }
     }
@@ -758,6 +754,22 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
         inst->imageXscale = (float) roomObj->scaleX;
         inst->imageYscale = (float) roomObj->scaleY;
         inst->imageAngle = (float) roomObj->rotation;
+    }
+
+    // In GMS2, instances get their depth from their room layer, not the object definition.
+    // This must happen before firing Create events so scripts like scr_depth() read the layer depth.
+    if (runner->isGMS2) {
+        repeat(room->layerCount, li) {
+            RoomLayer* layer = &room->layers[li];
+            if (layer->type != RoomLayerType_Instances || layer->instancesData == nullptr) continue;
+            RoomLayerInstancesData* layerData = layer->instancesData;
+            repeat(layerData->instanceCount, ii) {
+                Instance* inst = hmget(runner->instancesToId, layerData->instanceIds[ii]);
+                if (inst != nullptr) {
+                    inst->depth = layer->depth;
+                }
+            }
+        }
     }
 
     // Pass 2: Fire events for newly created instances (in room definition order)
@@ -1845,6 +1857,7 @@ void Runner_free(Runner* runner) {
         free(runner->savedRoomStates);
     }
 
+    hmfree(runner->instancesToId);
     hmfree(runner->tileLayerMap);
     shfree(runner->disabledObjects);
     RunnerKeyboard_free(runner->keyboard);
