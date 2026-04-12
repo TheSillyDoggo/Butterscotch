@@ -296,7 +296,7 @@ static uint32_t countFreeChunks(GsRenderer* gs) {
 
 // Find the atlas with the oldest lastUsed time (LRU victim).
 // Returns the atlasId, or -1 if no loaded atlases.
-static int16_t findLRUVictim(GsRenderer* gs) {
+static int16_t findLRUVictim(GsRenderer* gs, bool* wasUsedOnThisFrame) {
     uint64_t oldest = UINT64_MAX;
     int16_t victimAtlas = -1;
     forEach(VRAMChunk, chunk, gs->chunks, gs->chunkCount) {
@@ -305,6 +305,8 @@ static int16_t findLRUVictim(GsRenderer* gs) {
             victimAtlas = chunk->atlasId;
         }
     }
+    if (victimAtlas != -1)
+        *wasUsedOnThisFrame = oldest == gs->frameCounter;
     return victimAtlas;
 }
 
@@ -351,9 +353,19 @@ static int32_t allocateChunks(GsRenderer* gs, int chunksNeeded) {
 
     // Attempt 2: evict LRU victims one at a time until space is found
     repeat(gs->chunkCount, attempts) {
-        int16_t victim = findLRUVictim(gs);
+        bool wasUsedOnThisFrame = false;
+
+        int16_t victim = findLRUVictim(gs, &wasUsedOnThisFrame);
         if (0 > victim)
             break;
+
+        // We only need to flush if the victim was used on this frame
+        // If it wasn't, then we can evict with no care in the world
+        if (wasUsedOnThisFrame) {
+            fprintf(stderr, "GsRenderer: Flushing draw queue before VRAM evicting because atlas was used on the current frame\n");
+            gs->evictedAtlasUsedInCurrentFrame = true;
+            gsKit_queue_exec(gs->gsGlobal);
+        }
 
         evictAtlas(gs, victim);
 
@@ -362,6 +374,11 @@ static int32_t allocateChunks(GsRenderer* gs, int chunksNeeded) {
         if (idx >= 0)
             return idx;
     }
+
+    // At this point we are lost, just flush and hope for the best
+    gs->evictedAtlasUsedInCurrentFrame = true;
+    fprintf(stderr, "GsRenderer: Flushing draw queue before VRAM defrag\n");
+    gsKit_queue_exec(gs->gsGlobal);
 
     // Attempt 3: defrag - evict ALL and let them reload on demand
     // Handles fragmentation where enough free chunks exist but aren't consecutive
@@ -901,6 +918,7 @@ static void gsBeginFrame(Renderer* renderer, MAYBE_UNUSED int32_t gameW, MAYBE_U
     GsRenderer* gs = (GsRenderer*) renderer;
     gs->zCounter = 1;
     gs->frameCounter++;
+    gs->evictedAtlasUsedInCurrentFrame = false;
 }
 
 static void gsEndFrame(MAYBE_UNUSED Renderer* renderer) {

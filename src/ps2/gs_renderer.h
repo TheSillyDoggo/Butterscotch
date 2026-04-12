@@ -117,6 +117,7 @@ typedef struct {
     uint16_t atlasCount;       // Number of atlas IDs from ATLAS.BIN header
     uint8_t* atlasBpp;         // Bits per pixel per atlas (4 or 8), from ATLAS.BIN [atlasCount]
     uint64_t frameCounter;     // Incremented each frame for LRU tracking
+    bool evictedAtlasUsedInCurrentFrame; // Used for debugging, true if a atlas that was used on the current frame was evicted (VRAM thrashing)
 
     // EE RAM atlas cache (stores compressed atlas data to avoid repeated CDVD reads)
     uint8_t* eeCache;                  // 4 MiB contiguous buffer

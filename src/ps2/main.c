@@ -674,7 +674,7 @@ int main(int argc, char* argv[]) {
                 if (gsRenderer->eeCacheEntries[ai].atlasId >= 0) eeramAtlasCount++;
             }
 
-            snprintf(debugText, sizeof(debugText), "Tick: %.2fms\nFree: %d bytes\nVRAM Free: %lu bytes\nRoom Speed: %u%s\nAtlas: (%u, %u, %u)", tickTime, freeBytes, (unsigned long) vramFreeBytes, roomSpeed, speedCapRemoved ? " [UNCAPPED]" : "", vramAtlasCount, eeramAtlasCount, gsRenderer->atlasCount);
+            snprintf(debugText, sizeof(debugText), "Tick: %.2fms\nFree: %d bytes\nVRAM Free: %lu bytes\nRoom Speed: %u%s\nAtlas: (%u, %u, %u)%s", tickTime, freeBytes, (unsigned long) vramFreeBytes, roomSpeed, speedCapRemoved ? " [UNCAPPED]" : "", vramAtlasCount, eeramAtlasCount, gsRenderer->atlasCount, gsRenderer->evictedAtlasUsedInCurrentFrame ? " [THRASHING]" : "");
             gsKit_fontm_print_scaled(gsGlobal, gsFontM, 10.0f, 10.0f, 10, 0.6f, debugColor, debugText);
         }
 
