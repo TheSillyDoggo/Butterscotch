@@ -576,7 +576,7 @@ static void parseBGND(BinaryReader* reader, DataWin* dw) {
 
     if (count == 0) { free(ptrs); b->backgrounds = nullptr; return; }
 
-    b->backgrounds = safeMalloc(count * sizeof(Background));
+    b->backgrounds = safeCalloc(count, sizeof(Background));
     repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         Background* bg = &b->backgrounds[i];
