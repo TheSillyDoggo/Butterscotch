@@ -130,6 +130,6 @@ Having a transpiler also have other disadvantages:
 
 Here's a video :3 https://youtu.be/PuzBxe0VGtY
 
-## DELTARUNE (SURVEY_PROGRAM) (PlayStation 2)
+### DELTARUNE (SURVEY_PROGRAM) (PlayStation 2)
 
 Here's a video :3 https://youtu.be/TLJtV2WnrmQ
