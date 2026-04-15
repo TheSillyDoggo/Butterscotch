@@ -4,6 +4,7 @@
 #include "audio_system.h"
 #include "data_win.h"
 #include "file_system.h"
+#include "ini.h"
 #include "instance.h"
 #include "renderer.h"
 #include "runner_keyboard.h"
@@ -68,6 +69,29 @@ typedef struct {
     TileLayerState value;
 } TileLayerMapEntry;
 
+// stb_ds hashmap entry for ds_map: string key -> RValue
+typedef struct {
+    char* key;
+    RValue value;
+} DsMapEntry;
+
+// ds_list: dynamic array of RValues
+typedef struct {
+    RValue* items; // stb_ds dynamic array of RValues
+} DsList;
+
+// Open text file handle for GML file_text_* functions
+#define MAX_OPEN_TEXT_FILES 32
+typedef struct {
+    char* content; // full file content (for read mode)
+    char* writeBuffer; // accumulated text (for write mode)
+    char* filePath; // relative path (for write mode, to flush on close)
+    int32_t readPos; // current byte position in content (read mode)
+    int32_t contentLen; // length of content string
+    bool isWriteMode;
+    bool isOpen;
+} OpenTextFile;
+
 // Saved state for persistent rooms. When leaving a persistent room, instance state
 // and visual properties are saved here. When returning, they are restored instead
 // of re-creating from the room definition.
@@ -109,6 +133,32 @@ typedef struct Runner {
     bool isGMS2;
     bool forceDrawDepth;
     int32_t forcedDepth;
+
+    // ===[ Builtin function state ]===
+    DsMapEntry** dsMapPool; // stb_ds array of stb_ds hashmaps
+    DsList* dsListPool; // stb_ds array of DsList
+
+    // Motion planning potential field settings
+    GMLReal mpPotMaxrot;
+    GMLReal mpPotStep;
+    GMLReal mpPotAhead;
+    bool mpPotOnSpot;
+
+    // Legacy audio_play_music / audio_stop_music tracking
+    int32_t lastMusicInstance;
+
+    // INI file state
+    IniFile* currentIni;
+    char* currentIniPath;
+    bool currentIniDirty;
+    // Some games (like Undertale) open and close the same INI file EVERY SINGLE FRAME!
+    // While on modern devices this isn't a huge deal, this WILL cause issues on devices that have less than stellar file systems (like the PlayStation 2)
+    // To avoid unnecessary disk reads, we cache the last-closed INI and reuse it on reopen
+    IniFile* cachedIni; // Cache of last-closed INI (for fast reopen)
+    char* cachedIniPath;
+
+    // Text file handles for file_text_* functions
+    OpenTextFile openTextFiles[MAX_OPEN_TEXT_FILES];
 } Runner;
 
 const char* Runner_getEventName(int32_t eventType, int32_t eventSubtype);

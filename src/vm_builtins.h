@@ -150,7 +150,6 @@ typedef enum {
 } BuiltinVarId;
 
 void VMBuiltins_registerAll(VMContext* ctx, bool isGMS2);
-void VMBuiltins_free(void);
 int16_t VMBuiltins_resolveBuiltinVarId(const char* name);
 RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* name, int32_t arrayIndex);
 void VMBuiltins_setVariable(VMContext* ctx, int16_t builtinVarId, const char* name, RValue val, int32_t arrayIndex);

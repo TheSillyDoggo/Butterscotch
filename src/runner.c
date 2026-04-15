@@ -840,6 +840,56 @@ static void cleanupState(Runner* runner) {
     runner->tileLayerMap = nullptr;
     shfree(runner->disabledObjects);
     runner->disabledObjects = nullptr;
+
+    // Free ds_map pool
+    repeat((int32_t) arrlen(runner->dsMapPool), i) {
+        DsMapEntry* map = runner->dsMapPool[i];
+        if (map != nullptr) {
+            repeat(shlen(map), j) {
+                free(map[j].key);
+                RValue_free(&map[j].value);
+            }
+            shfree(map);
+        }
+    }
+    arrfree(runner->dsMapPool);
+    runner->dsMapPool = nullptr;
+
+    // Free ds_list pool
+    repeat((int32_t) arrlen(runner->dsListPool), i) {
+        DsList* list = &runner->dsListPool[i];
+        repeat(arrlen(list->items), j) {
+            RValue_free(&list->items[j]);
+        }
+        arrfree(list->items);
+    }
+    arrfree(runner->dsListPool);
+    runner->dsListPool = nullptr;
+
+    // Free INI state
+    if (runner->currentIni != nullptr) {
+        Ini_free(runner->currentIni);
+        runner->currentIni = nullptr;
+    }
+    free(runner->currentIniPath);
+    runner->currentIniPath = nullptr;
+    if (runner->cachedIni != nullptr) {
+        Ini_free(runner->cachedIni);
+        runner->cachedIni = nullptr;
+    }
+    free(runner->cachedIniPath);
+    runner->cachedIniPath = nullptr;
+
+    // Free open text files
+    repeat(MAX_OPEN_TEXT_FILES, i) {
+        OpenTextFile* file = &runner->openTextFiles[i];
+        if (file->isOpen) {
+            free(file->content);
+            free(file->writeBuffer);
+            free(file->filePath);
+            *file = (OpenTextFile) {0};
+        }
+    }
 }
 
 // ===[ Public API ]===
@@ -855,6 +905,13 @@ void Runner_reset(Runner* runner) {
     runner->nextInstanceId = runner->dataWin->gen8.lastObj + 1;
     runner->savedRoomStates = safeCalloc(runner->dataWin->room.count, sizeof(SavedRoomState));
     runner->audioSystem->vtable->stopAll(runner->audioSystem);
+
+    // Reset builtin function state
+    runner->mpPotMaxrot = 30.0;
+    runner->mpPotStep = 10.0;
+    runner->mpPotAhead = 3.0;
+    runner->mpPotOnSpot = true;
+    runner->lastMusicInstance = -1;
 }
 
 Runner* Runner_create(DataWin* dataWin, VMContext* vm, Renderer* renderer, FileSystem* fileSystem, AudioSystem* audioSystem) {

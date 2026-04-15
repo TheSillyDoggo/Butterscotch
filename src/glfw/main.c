@@ -19,7 +19,6 @@
 #include "runner_keyboard.h"
 #include "runner.h"
 #include "input_recording.h"
-#include "vm_builtins.h"
 #include "debug_overlay.h"
 #include "gl_renderer.h"
 #include "glfw_file_system.h"
@@ -452,7 +451,6 @@ int main(int argc, char* argv[]) {
                 );
             }
         }
-        VMBuiltins_free();
         VM_free(vm);
         DataWin_free(dataWin);
         return 0;
@@ -462,7 +460,6 @@ int main(int argc, char* argv[]) {
         repeat(hmlen(vm->funcMap), i) {
             printf("[%d] %s\n", vm->funcMap[i].value, vm->funcMap[i].key);
         }
-        VMBuiltins_free();
         VM_free(vm);
         DataWin_free(dataWin);
         return 0;
@@ -485,7 +482,6 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-        VMBuiltins_free();
         VM_free(vm);
         DataWin_free(dataWin);
         freeCommandLineArgs(&args);
@@ -866,7 +862,6 @@ int main(int argc, char* argv[]) {
 
     Runner_free(runner);
     GlfwFileSystem_destroy(glfwFileSystem);
-    VMBuiltins_free();
     VM_free(vm);
     DataWin_free(dataWin);
 

@@ -42,43 +42,30 @@ static void logStubbedFunction(VMContext* ctx, const char* funcName) {
 
 // ===[ DS_MAP SYSTEM ]===
 
-typedef struct {
-    char* key;
-    RValue value;
-} DsMapEntry;
-
-static DsMapEntry** dsMapPool = nullptr; // stb_ds array of shash maps
-
-static int32_t dsMapCreate(void) {
+static int32_t dsMapCreate(Runner* runner) {
     DsMapEntry* newMap = nullptr;
-    int32_t id = (int32_t) arrlen(dsMapPool);
-    arrput(dsMapPool, newMap);
+    int32_t id = (int32_t) arrlen(runner->dsMapPool);
+    arrput(runner->dsMapPool, newMap);
     return id;
 }
 
-static DsMapEntry** dsMapGet(int32_t id) {
-    if (id < 0 || (int32_t) arrlen(dsMapPool) <= id) return nullptr;
-    return &dsMapPool[id];
+static DsMapEntry** dsMapGet(Runner* runner, int32_t id) {
+    if (id < 0 || (int32_t) arrlen(runner->dsMapPool) <= id) return nullptr;
+    return &runner->dsMapPool[id];
 }
 
 // ===[ DS_LIST SYSTEM ]===
 
-typedef struct {
-    RValue* items; // stb_ds dynamic array of RValues
-} DsList;
-
-static DsList* dsListPool = nullptr; // stb_ds array of DsList
-
-static int32_t dsListCreate(void) {
+static int32_t dsListCreate(Runner* runner) {
     DsList newList = { .items = nullptr };
-    int32_t id = (int32_t) arrlen(dsListPool);
-    arrput(dsListPool, newList);
+    int32_t id = (int32_t) arrlen(runner->dsListPool);
+    arrput(runner->dsListPool, newList);
     return id;
 }
 
-static DsList* dsListGet(int32_t id) {
-    if (0 > id || id > (int32_t) arrlen(dsListPool)) return nullptr;
-    return &dsListPool[id];
+static DsList* dsListGet(Runner* runner, int32_t id) {
+    if (0 > id || id > (int32_t) arrlen(runner->dsListPool)) return nullptr;
+    return &runner->dsListPool[id];
 }
 
 // ===[ BUILT-IN VARIABLE GET/SET ]===
@@ -1430,14 +1417,16 @@ static inline ptrdiff_t getValueIndexInMap(DsMapEntry** mapPtr, RValue keyRvalue
     return idx;
 }
 
-static RValue builtinDsMapCreate(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    return RValue_makeReal((GMLReal) dsMapCreate());
+static RValue builtinDsMapCreate(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    return RValue_makeReal((GMLReal) dsMapCreate(runner));
 }
 
-static RValue builtinDsMapAdd(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinDsMapAdd(VMContext* ctx, RValue* args, int32_t argCount) {
     if (3 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsMapEntry** mapPtr = dsMapGet(id);
+    DsMapEntry** mapPtr = dsMapGet(runner, id);
     if (mapPtr == nullptr) return RValue_makeUndefined();
 
     char* key = RValue_toString(args[1]);
@@ -1459,10 +1448,11 @@ static RValue builtinDsMapAdd(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t
     return RValue_makeUndefined();
 }
 
-static RValue builtinDsMapSet(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinDsMapSet(VMContext* ctx, RValue* args, int32_t argCount) {
     if (3 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsMapEntry** mapPtr = dsMapGet(id);
+    DsMapEntry** mapPtr = dsMapGet(runner, id);
     if (mapPtr == nullptr) return RValue_makeUndefined();
 
     char* key = RValue_toString(args[1]);
@@ -1495,10 +1485,11 @@ static RValue builtinDsMapReplace(VMContext* ctx, RValue* args, int32_t argCount
     return builtinDsMapSet(ctx, args, argCount);
 }
 
-static RValue builtinDsMapFindValue(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinDsMapFindValue(VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsMapEntry** mapPtr = dsMapGet(id);
+    DsMapEntry** mapPtr = dsMapGet(runner, id);
     if (mapPtr == nullptr) return RValue_makeUndefined();
 
     ptrdiff_t idx = getValueIndexInMap(mapPtr, args[1]);
@@ -1511,10 +1502,11 @@ static RValue builtinDsMapFindValue(MAYBE_UNUSED VMContext* ctx, RValue* args, i
     return val;
 }
 
-static RValue builtinDsMapExists(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinDsMapExists(VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount) return RValue_makeReal(0.0);
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsMapEntry** mapPtr = dsMapGet(id);
+    DsMapEntry** mapPtr = dsMapGet(runner, id);
     if (mapPtr == nullptr) return RValue_makeReal(0.0);
 
     ptrdiff_t idx = getValueIndexInMap(mapPtr, args[1]);
@@ -1522,18 +1514,20 @@ static RValue builtinDsMapExists(MAYBE_UNUSED VMContext* ctx, RValue* args, int3
     return RValue_makeReal(idx >= 0 ? 1.0 : 0.0);
 }
 
-static RValue builtinDsMapFindFirst(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinDsMapFindFirst(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsMapEntry** mapPtr = dsMapGet(id);
+    DsMapEntry** mapPtr = dsMapGet(runner, id);
     if (mapPtr == nullptr || shlen(*mapPtr) == 0) return RValue_makeUndefined();
     return RValue_makeOwnedString(safeStrdup((*mapPtr)[0].key));
 }
 
-static RValue builtinDsMapFindNext(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinDsMapFindNext(VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsMapEntry** mapPtr = dsMapGet(id);
+    DsMapEntry** mapPtr = dsMapGet(runner, id);
     if (mapPtr == nullptr) return RValue_makeUndefined();
 
     ptrdiff_t idx = getValueIndexInMap(mapPtr, args[1]);
@@ -1541,18 +1535,20 @@ static RValue builtinDsMapFindNext(MAYBE_UNUSED VMContext* ctx, RValue* args, in
     return RValue_makeOwnedString(safeStrdup((*mapPtr)[idx + 1].key));
 }
 
-static RValue builtinDsMapSize(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinDsMapSize(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeReal(0.0);
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsMapEntry** mapPtr = dsMapGet(id);
+    DsMapEntry** mapPtr = dsMapGet(runner, id);
     if (mapPtr == nullptr) return RValue_makeReal(0.0);
     return RValue_makeReal((GMLReal) shlen(*mapPtr));
 }
 
-static RValue builtinDsMapDestroy(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinDsMapDestroy(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsMapEntry** mapPtr = dsMapGet(id);
+    DsMapEntry** mapPtr = dsMapGet(runner, id);
     if (mapPtr == nullptr) return RValue_makeUndefined();
     // Free all keys and values
     for (ptrdiff_t i = 0; shlen(*mapPtr) > i; i++) {
@@ -1566,13 +1562,15 @@ static RValue builtinDsMapDestroy(MAYBE_UNUSED VMContext* ctx, RValue* args, int
 
 // ===[ DS_LIST FUNCTIONS ]===
 
-static RValue builtinDsListCreate(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    return RValue_makeReal((GMLReal) dsListCreate());
+static RValue builtinDsListCreate(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    return RValue_makeReal((GMLReal) dsListCreate(runner));
 }
 
-static RValue builtinDsListAdd(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinDsListAdd(VMContext* ctx, RValue* args, int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsList* list = dsListGet(id);
+    DsList* list = dsListGet(runner, id);
     if (list == nullptr) return RValue_makeUndefined();
     // ds_list_add can take multiple values after the list id
     repeat(argCount - 1, i) {
@@ -1585,16 +1583,18 @@ static RValue builtinDsListAdd(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_
     return RValue_makeUndefined();
 }
 
-static RValue builtinDsListSize(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+static RValue builtinDsListSize(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsList* list = dsListGet(id);
+    DsList* list = dsListGet(runner, id);
     if (list == nullptr) return RValue_makeReal(0.0);
     return RValue_makeReal((GMLReal) arrlen(list->items));
 }
 
-static RValue builtinDsListFindIndex(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+static RValue builtinDsListFindIndex(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
-    DsList* list = dsListGet(id);
+    DsList* list = dsListGet(runner, id);
     if (list == nullptr) return RValue_makeReal(-1.0);
     RValue needle = args[1];
     for (int32_t i = 0; (int32_t) arrlen(list->items) > i; i++) {
@@ -1896,10 +1896,6 @@ static RValue builtinMpLinearStepObject(VMContext* ctx, RValue* args, MAYBE_UNUS
     return builtinMpLinearStepCommon(ctx, goalX, goalY, stepsize, obj, true);
 }
 
-static GMLReal mpPotMaxrot = 30.0;
-static GMLReal mpPotStep = 10.0;
-static GMLReal mpPotAhead = 3.0;
-static bool mpPotOnSpot = true;
 
 // Computes the shortest angular difference between two directions (result 0-180)
 static GMLReal mpDiffDir(GMLReal dir1, GMLReal dir2) {
@@ -1917,15 +1913,15 @@ static GMLReal mpDiffDir(GMLReal dir1, GMLReal dir2) {
 // If successful, moves the instance and sets its direction
 static bool mpTryDir(GMLReal dir, Runner* runner, Instance* inst, GMLReal speed, int32_t objIndex, bool checkall) {
     // See whether angle is acceptable
-    if (mpDiffDir(dir, inst->direction) > mpPotMaxrot) return false;
+    if (mpDiffDir(dir, inst->direction) > runner->mpPotMaxrot) return false;
 
     GMLReal dirRad = dir * (M_PI / 180.0);
     GMLReal cosDir = GMLReal_cos(dirRad);
     GMLReal sinDir = GMLReal_sin(dirRad);
 
     // Check position a bit ahead
-    GMLReal aheadX = inst->x + speed * mpPotAhead * cosDir;
-    GMLReal aheadY = inst->y - speed * mpPotAhead * sinDir;
+    GMLReal aheadX = inst->x + speed * runner->mpPotAhead * cosDir;
+    GMLReal aheadY = inst->y - speed * runner->mpPotAhead * sinDir;
     if (!mpTestFree(runner, inst, aheadX, aheadY, objIndex, checkall)) return false;
 
     // Check next position
@@ -1968,13 +1964,13 @@ static RValue builtinMpPotentialStepCommon(VMContext* ctx, GMLReal goalX, GMLRea
     while (180.0 > curdir) {
         if (mpTryDir(goaldir - curdir, runner, inst, stepsize, objIndex, checkall)) return RValue_makeBool(false);
         if (mpTryDir(goaldir + curdir, runner, inst, stepsize, objIndex, checkall)) return RValue_makeBool(false);
-        curdir += mpPotStep;
+        curdir += runner->mpPotStep;
     }
 
     // If we did not succeed, a local minima was reached
     // To avoid the instance getting stuck we rotate on the spot
-    if (mpPotOnSpot) {
-        inst->direction = (float) (inst->direction + mpPotMaxrot);
+    if (runner->mpPotOnSpot) {
+        inst->direction = (float) (inst->direction + runner->mpPotMaxrot);
     }
 
     return RValue_makeBool(false);
@@ -1999,15 +1995,16 @@ static RValue builtinMpPotentialStepObject(VMContext* ctx, RValue* args, MAYBE_U
 }
 
 // mp_potential_settings(maxrot, rotstep, ahead, onspot)
-static RValue builtinMpPotentialSettings(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+static RValue builtinMpPotentialSettings(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
     GMLReal maxrot = RValue_toReal(args[0]);
     GMLReal rotstep = RValue_toReal(args[1]);
     GMLReal ahead = RValue_toReal(args[2]);
     bool onspot = RValue_toBool(args[3]);
-    mpPotMaxrot = (maxrot < 1.0) ? 1.0 : maxrot;
-    mpPotStep = (rotstep < 1.0) ? 1.0 : rotstep;
-    mpPotAhead = (ahead < 1.0) ? 1.0 : ahead;
-    mpPotOnSpot = onspot;
+    runner->mpPotMaxrot = (maxrot < 1.0) ? 1.0 : maxrot;
+    runner->mpPotStep = (rotstep < 1.0) ? 1.0 : rotstep;
+    runner->mpPotAhead = (ahead < 1.0) ? 1.0 : ahead;
+    runner->mpPotOnSpot = onspot;
     return RValue_makeReal(0.0);
 }
 
@@ -2053,8 +2050,6 @@ static AudioSystem* getAudioSystem(VMContext* ctx) {
     return runner->audioSystem;
 }
 
-// Track the last music instance for legacy audio_play_music / audio_stop_music
-static int32_t lastMusicInstance = -1;
 
 static RValue builtin_audioChannelNum(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     AudioSystem* audio = getAudioSystem(ctx);
@@ -2082,11 +2077,12 @@ static RValue builtin_audioStopSound(VMContext* ctx, RValue* args, MAYBE_UNUSED 
     return RValue_makeUndefined();
 }
 
-static RValue builtin_audioStopAll(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+static RValue builtin_audioStopAll(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     AudioSystem* audio = getAudioSystem(ctx);
     if (audio == nullptr) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     audio->vtable->stopAll(audio);
-    lastMusicInstance = -1;
+    runner->lastMusicInstance = -1;
     return RValue_makeUndefined();
 }
 
@@ -2172,17 +2168,19 @@ static RValue builtin_audioPlayMusic(VMContext* ctx, RValue* args, MAYBE_UNUSED 
     int32_t soundIndex = RValue_toInt32(args[0]);
     int32_t priority = RValue_toInt32(args[1]);
     bool loop = RValue_toBool(args[2]);
+    Runner* runner = (Runner*) ctx->runner;
     int32_t instanceId = audio->vtable->playSound(audio, soundIndex, priority, loop);
-    lastMusicInstance = instanceId;
+    runner->lastMusicInstance = instanceId;
     return RValue_makeReal((GMLReal) instanceId);
 }
 
-static RValue builtin_audioStopMusic(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+static RValue builtin_audioStopMusic(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     AudioSystem* audio = getAudioSystem(ctx);
     if (audio == nullptr) return RValue_makeUndefined();
-    if (lastMusicInstance >= 0) {
-        audio->vtable->stopSound(audio, lastMusicInstance);
-        lastMusicInstance = -1;
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->lastMusicInstance >= 0) {
+        audio->vtable->stopSound(audio, runner->lastMusicInstance);
+        runner->lastMusicInstance = -1;
     }
     return RValue_makeUndefined();
 }
@@ -2190,19 +2188,21 @@ static RValue builtin_audioStopMusic(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED R
 static RValue builtin_audioMusicGain(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     AudioSystem* audio = getAudioSystem(ctx);
     if (audio == nullptr) return RValue_makeUndefined();
-    if (lastMusicInstance >= 0) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->lastMusicInstance >= 0) {
         float gain = (float) RValue_toReal(args[0]);
         uint32_t timeMs = (uint32_t) RValue_toInt32(args[1]);
-        audio->vtable->setSoundGain(audio, lastMusicInstance, gain, timeMs);
+        audio->vtable->setSoundGain(audio, runner->lastMusicInstance, gain, timeMs);
     }
     return RValue_makeUndefined();
 }
 
-static RValue builtin_audioMusicIsPlaying(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+static RValue builtin_audioMusicIsPlaying(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     AudioSystem* audio = getAudioSystem(ctx);
     if (audio == nullptr) return RValue_makeBool(false);
-    if (lastMusicInstance >= 0) {
-        return RValue_makeBool(audio->vtable->isPlaying(audio, lastMusicInstance));
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->lastMusicInstance >= 0) {
+        return RValue_makeBool(audio->vtable->isPlaying(audio, runner->lastMusicInstance));
     }
     return RValue_makeBool(false);
 }
@@ -2287,106 +2287,97 @@ STUB_RETURN_ZERO(gamepad_button_value)
 
 // ===[ INI Functions ]===
 
-static IniFile* currentIni = nullptr;
-static char* currentIniPath = nullptr;
-static bool currentIniDirty = false;
-
-// Some games (like Undertale) open and close the same INI file EVERY SINGLE FRAME!
-// While on modern devices this isn't a huge deal, this WILL cause issues on devices that have less than stellar file systems (like the PlayStation 2)
-// To avoid unnecessary disk reads, we cache the last-closed INI and reuse it on reopen
-static IniFile* cachedIni = nullptr;
-static char* cachedIniPath = nullptr;
-
-static void discardIniCache(void) {
-    if (cachedIni != nullptr) {
-        Ini_free(cachedIni);
-        cachedIni = nullptr;
+static void discardIniCache(Runner* runner) {
+    if (runner->cachedIni != nullptr) {
+        Ini_free(runner->cachedIni);
+        runner->cachedIni = nullptr;
     }
-    free(cachedIniPath);
-    cachedIniPath = nullptr;
+    free(runner->cachedIniPath);
+    runner->cachedIniPath = nullptr;
 }
 
 static RValue builtinIniOpen(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeUndefined();
 
+    Runner* runner = (Runner*) ctx->runner;
     const char* path = (args[0].type == RVALUE_STRING ? args[0].string : "");
 
     // If the same file is already open, do nothing
-    if (currentIni != nullptr && currentIniPath != nullptr && strcmp(currentIniPath, path) == 0) {
+    if (runner->currentIni != nullptr && runner->currentIniPath != nullptr && strcmp(runner->currentIniPath, path) == 0) {
         return RValue_makeUndefined();
     }
 
     // Close any previously open INI (implicit close, no disk write)
-    if (currentIni != nullptr) {
-        Ini_free(currentIni);
-        currentIni = nullptr;
+    if (runner->currentIni != nullptr) {
+        Ini_free(runner->currentIni);
+        runner->currentIni = nullptr;
     }
-    free(currentIniPath);
-    currentIniPath = nullptr;
+    free(runner->currentIniPath);
+    runner->currentIniPath = nullptr;
 
     // Check if we have a cached INI for this path
-    if (cachedIni != nullptr && cachedIniPath != nullptr && strcmp(cachedIniPath, path) == 0) {
-        currentIni = cachedIni;
-        currentIniPath = cachedIniPath;
-        cachedIni = nullptr;
-        cachedIniPath = nullptr;
-        currentIniDirty = false;
+    if (runner->cachedIni != nullptr && runner->cachedIniPath != nullptr && strcmp(runner->cachedIniPath, path) == 0) {
+        runner->currentIni = runner->cachedIni;
+        runner->currentIniPath = runner->cachedIniPath;
+        runner->cachedIni = nullptr;
+        runner->cachedIniPath = nullptr;
+        runner->currentIniDirty = false;
         return RValue_makeUndefined();
     }
 
     // Cache miss, discard the old cache and read from disk
-    discardIniCache();
+    discardIniCache(runner);
 
-    Runner* runner = (Runner*) ctx->runner;
     FileSystem* fs = runner->fileSystem;
 
-    currentIniPath = safeStrdup(path);
+    runner->currentIniPath = safeStrdup(path);
 
     char* content = fs->vtable->readFileText(fs, path);
     if (content != nullptr) {
-        currentIni = Ini_parse(content);
+        runner->currentIni = Ini_parse(content);
         free(content);
     } else {
-        currentIni = Ini_parse("");
+        runner->currentIni = Ini_parse("");
     }
 
-    currentIniDirty = false;
+    runner->currentIniDirty = false;
 
     return RValue_makeUndefined();
 }
 
 static RValue builtinIniClose(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
-    if (currentIni != nullptr) {
-        Runner* runner = (Runner*) ctx->runner;
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->currentIni != nullptr) {
         FileSystem* fs = runner->fileSystem;
 
-        if (currentIniDirty) {
-            char* serialized = Ini_serialize(currentIni, INI_SERIALIZE_DEFAULT_INITIAL_CAPACITY);
-            fs->vtable->writeFileText(fs, currentIniPath, serialized);
+        if (runner->currentIniDirty) {
+            char* serialized = Ini_serialize(runner->currentIni, INI_SERIALIZE_DEFAULT_INITIAL_CAPACITY);
+            fs->vtable->writeFileText(fs, runner->currentIniPath, serialized);
             free(serialized);
         }
 
         // Move to cache instead of freeing
-        discardIniCache();
-        cachedIni = currentIni;
-        cachedIniPath = currentIniPath;
-        currentIni = nullptr;
-        currentIniPath = nullptr;
+        discardIniCache(runner);
+        runner->cachedIni = runner->currentIni;
+        runner->cachedIniPath = runner->currentIniPath;
+        runner->currentIni = nullptr;
+        runner->currentIniPath = nullptr;
     } else {
-        free(currentIniPath);
-        currentIniPath = nullptr;
+        free(runner->currentIniPath);
+        runner->currentIniPath = nullptr;
     }
 
     return RValue_makeUndefined();
 }
 
-static RValue builtinIniReadString(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
-    if (3 > argCount || currentIni == nullptr) return RValue_makeOwnedString(safeStrdup(""));
+static RValue builtinIniReadString(VMContext* ctx, RValue* args, int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (3 > argCount || runner->currentIni == nullptr) return RValue_makeOwnedString(safeStrdup(""));
 
     const char* section = (args[0].type == RVALUE_STRING ? args[0].string : "");
     const char* key = (args[1].type == RVALUE_STRING ? args[1].string : "");
 
-    const char* value = Ini_getString(currentIni, section, key);
+    const char* value = Ini_getString(runner->currentIni, section, key);
     if (value != nullptr) {
         return RValue_makeOwnedString(safeStrdup(value));
     }
@@ -2399,13 +2390,14 @@ static RValue builtinIniReadString(MAYBE_UNUSED VMContext* ctx, RValue* args, in
     return RValue_makeOwnedString(str);
 }
 
-static RValue builtinIniReadReal(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
-    if (3 > argCount || currentIni == nullptr) return RValue_makeReal(0.0);
+static RValue builtinIniReadReal(VMContext* ctx, RValue* args, int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (3 > argCount || runner->currentIni == nullptr) return RValue_makeReal(0.0);
 
     const char* section = (args[0].type == RVALUE_STRING ? args[0].string : "");
     const char* key = (args[1].type == RVALUE_STRING ? args[1].string : "");
 
-    const char* value = Ini_getString(currentIni, section, key);
+    const char* value = Ini_getString(runner->currentIni, section, key);
     if (value != nullptr) {
         return RValue_makeReal(atof(value));
     }
@@ -2413,56 +2405,46 @@ static RValue builtinIniReadReal(MAYBE_UNUSED VMContext* ctx, RValue* args, int3
     return RValue_makeReal(RValue_toReal(args[2]));
 }
 
-static RValue builtinIniWriteString(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
-    if (3 > argCount || currentIni == nullptr) return RValue_makeUndefined();
+static RValue builtinIniWriteString(VMContext* ctx, RValue* args, int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (3 > argCount || runner->currentIni == nullptr) return RValue_makeUndefined();
 
     const char* section = (args[0].type == RVALUE_STRING ? args[0].string : "");
     const char* key = (args[1].type == RVALUE_STRING ? args[1].string : "");
     const char* value = (args[2].type == RVALUE_STRING ? args[2].string : "");
 
-    Ini_setString(currentIni, section, key, value);
-    currentIniDirty = true;
+    Ini_setString(runner->currentIni, section, key, value);
+    runner->currentIniDirty = true;
     return RValue_makeUndefined();
 }
 
-static RValue builtinIniWriteReal(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
-    if (3 > argCount || currentIni == nullptr) return RValue_makeUndefined();
+static RValue builtinIniWriteReal(VMContext* ctx, RValue* args, int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (3 > argCount || runner->currentIni == nullptr) return RValue_makeUndefined();
 
     const char* section = (args[0].type == RVALUE_STRING ? args[0].string : "");
     const char* key = (args[1].type == RVALUE_STRING ? args[1].string : "");
     char* valueStr = RValue_toString(args[2]);
 
-    Ini_setString(currentIni, section, key, valueStr);
-    currentIniDirty = true;
+    Ini_setString(runner->currentIni, section, key, valueStr);
+    runner->currentIniDirty = true;
     free(valueStr);
     return RValue_makeUndefined();
 }
 
-static RValue builtinIniSectionExists(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
-    if (1 > argCount || currentIni == nullptr) return RValue_makeBool(false);
+static RValue builtinIniSectionExists(VMContext* ctx, RValue* args, int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (1 > argCount || runner->currentIni == nullptr) return RValue_makeBool(false);
 
     const char* section = (args[0].type == RVALUE_STRING ? args[0].string : "");
-    return RValue_makeBool(Ini_hasSection(currentIni, section));
+    return RValue_makeBool(Ini_hasSection(runner->currentIni, section));
 }
 
 // ===[ Text File Functions ]===
 
-typedef struct {
-    char* content; // full file content (for read mode)
-    char* writeBuffer; // accumulated text (for write mode)
-    char* filePath; // relative path (for write mode, to flush on close)
-    int32_t readPos;    // current byte position in content (read mode)
-    int32_t contentLen; // length of content string
-    bool isWriteMode;
-    bool isOpen;
-} OpenTextFile;
-
-#define MAX_OPEN_TEXT_FILES 32
-static OpenTextFile openTextFiles[MAX_OPEN_TEXT_FILES];
-
-static int32_t findFreeTextFileSlot(void) {
+static int32_t findFreeTextFileSlot(Runner* runner) {
     repeat(MAX_OPEN_TEXT_FILES, i) {
-        if (!openTextFiles[i].isOpen) return (int32_t) i;
+        if (!runner->openTextFiles[i].isOpen) return (int32_t) i;
     }
     return -1;
 }
@@ -2481,7 +2463,7 @@ static RValue builtinFileTextOpenRead(VMContext* ctx, RValue* args, int32_t argC
     Runner* runner = (Runner*) ctx->runner;
     FileSystem* fs = runner->fileSystem;
 
-    int32_t slot = findFreeTextFileSlot();
+    int32_t slot = findFreeTextFileSlot(runner);
     if (0 > slot) {
         fprintf(stderr, "Warning: Too many open text files!\n");
         abort();
@@ -2493,7 +2475,7 @@ static RValue builtinFileTextOpenRead(VMContext* ctx, RValue* args, int32_t argC
         content = safeStrdup("");
     }
 
-    openTextFiles[slot] = (OpenTextFile) {
+    runner->openTextFiles[slot] = (OpenTextFile) {
         .content = content,
         .writeBuffer = nullptr,
         .filePath = nullptr,
@@ -2509,15 +2491,15 @@ static RValue builtinFileTextOpenRead(VMContext* ctx, RValue* args, int32_t argC
 static RValue builtinFileTextOpenWrite(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeReal(-1.0);
     const char* path = (args[0].type == RVALUE_STRING ? args[0].string : "");
-    (void) ctx;
+    Runner* runner = (Runner*) ctx->runner;
 
-    int32_t slot = findFreeTextFileSlot();
+    int32_t slot = findFreeTextFileSlot(runner);
     if (0 > slot) {
         fprintf(stderr, "Warning: Too many open text files!\n");
         abort();
     }
 
-    openTextFiles[slot] = (OpenTextFile) {
+    runner->openTextFiles[slot] = (OpenTextFile) {
         .content = nullptr,
         .writeBuffer = safeStrdup(""),
         .filePath = safeStrdup(path),
@@ -2532,12 +2514,12 @@ static RValue builtinFileTextOpenWrite(VMContext* ctx, RValue* args, int32_t arg
 
 static RValue builtinFileTextClose(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     int32_t handle = RValue_toInt32(args[0]);
-    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !openTextFiles[handle].isOpen) return RValue_makeUndefined();
+    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !runner->openTextFiles[handle].isOpen) return RValue_makeUndefined();
 
-    OpenTextFile* file = &openTextFiles[handle];
+    OpenTextFile* file = &runner->openTextFiles[handle];
     if (file->isWriteMode && file->writeBuffer != nullptr && file->filePath != nullptr) {
-        Runner* runner = (Runner*) ctx->runner;
         FileSystem* fs = runner->fileSystem;
         fs->vtable->writeFileText(fs, file->filePath, file->writeBuffer);
     }
@@ -2549,12 +2531,13 @@ static RValue builtinFileTextClose(VMContext* ctx, RValue* args, int32_t argCoun
     return RValue_makeUndefined();
 }
 
-static RValue builtinFileTextReadString(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinFileTextReadString(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeOwnedString(safeStrdup(""));
+    Runner* runner = (Runner*) ctx->runner;
     int32_t handle = RValue_toInt32(args[0]);
-    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !openTextFiles[handle].isOpen) return RValue_makeOwnedString(safeStrdup(""));
+    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !runner->openTextFiles[handle].isOpen) return RValue_makeOwnedString(safeStrdup(""));
 
-    OpenTextFile* file = &openTextFiles[handle];
+    OpenTextFile* file = &runner->openTextFiles[handle];
     if (file->readPos >= file->contentLen) return RValue_makeOwnedString(safeStrdup(""));
 
     // Read until newline, carriage return, or EOF (does NOT consume the newline)
@@ -2573,12 +2556,13 @@ static RValue builtinFileTextReadString(MAYBE_UNUSED VMContext* ctx, RValue* arg
     return RValue_makeOwnedString(result);
 }
 
-static RValue builtinFileTextReadln(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinFileTextReadln(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeOwnedString(safeStrdup(""));
+    Runner* runner = (Runner*) ctx->runner;
     int32_t handle = RValue_toInt32(args[0]);
-    if (0 > handle || MAX_OPEN_TEXT_FILES <= handle || !openTextFiles[handle].isOpen) return RValue_makeOwnedString(safeStrdup(""));
+    if (0 > handle || MAX_OPEN_TEXT_FILES <= handle || !runner->openTextFiles[handle].isOpen) return RValue_makeOwnedString(safeStrdup(""));
 
-    OpenTextFile* file = &openTextFiles[handle];
+    OpenTextFile* file = &runner->openTextFiles[handle];
 
     int size = 0;
     int readPos = file->readPos;
@@ -2608,12 +2592,13 @@ static RValue builtinFileTextReadln(MAYBE_UNUSED VMContext* ctx, RValue* args, i
     return RValue_makeOwnedString(string);
 }
 
-static RValue builtinFileTextReadReal(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinFileTextReadReal(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeReal(0.0);
+    Runner* runner = (Runner*) ctx->runner;
     int32_t handle = RValue_toInt32(args[0]);
-    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !openTextFiles[handle].isOpen) return RValue_makeReal(0.0);
+    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !runner->openTextFiles[handle].isOpen) return RValue_makeReal(0.0);
 
-    OpenTextFile* file = &openTextFiles[handle];
+    OpenTextFile* file = &runner->openTextFiles[handle];
     if (file->readPos >= file->contentLen) return RValue_makeReal(0.0);
 
     // strtod will parse the number and advance past it
@@ -2626,12 +2611,13 @@ static RValue builtinFileTextReadReal(MAYBE_UNUSED VMContext* ctx, RValue* args,
     return RValue_makeReal(value);
 }
 
-static RValue builtinFileTextWriteString(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinFileTextWriteString(VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     int32_t handle = RValue_toInt32(args[0]);
-    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !openTextFiles[handle].isOpen) return RValue_makeUndefined();
+    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !runner->openTextFiles[handle].isOpen) return RValue_makeUndefined();
 
-    OpenTextFile* file = &openTextFiles[handle];
+    OpenTextFile* file = &runner->openTextFiles[handle];
     if (!file->isWriteMode) return RValue_makeUndefined();
 
     char* str = RValue_toString(args[1]);
@@ -2645,12 +2631,13 @@ static RValue builtinFileTextWriteString(MAYBE_UNUSED VMContext* ctx, RValue* ar
     return RValue_makeUndefined();
 }
 
-static RValue builtinFileTextWriteln(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinFileTextWriteln(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     int32_t handle = RValue_toInt32(args[0]);
-    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !openTextFiles[handle].isOpen) return RValue_makeUndefined();
+    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !runner->openTextFiles[handle].isOpen) return RValue_makeUndefined();
 
-    OpenTextFile* file = &openTextFiles[handle];
+    OpenTextFile* file = &runner->openTextFiles[handle];
     if (!file->isWriteMode) return RValue_makeUndefined();
 
     size_t oldLen = strlen(file->writeBuffer);
@@ -2661,12 +2648,13 @@ static RValue builtinFileTextWriteln(MAYBE_UNUSED VMContext* ctx, RValue* args, 
     return RValue_makeUndefined();
 }
 
-static RValue builtinFileTextWriteReal(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinFileTextWriteReal(VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
     int32_t handle = RValue_toInt32(args[0]);
-    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !openTextFiles[handle].isOpen) return RValue_makeUndefined();
+    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !runner->openTextFiles[handle].isOpen) return RValue_makeUndefined();
 
-    OpenTextFile* file = &openTextFiles[handle];
+    OpenTextFile* file = &runner->openTextFiles[handle];
     if (!file->isWriteMode) return RValue_makeUndefined();
 
     char* str = RValue_toString(args[1]);
@@ -2680,12 +2668,13 @@ static RValue builtinFileTextWriteReal(MAYBE_UNUSED VMContext* ctx, RValue* args
     return RValue_makeUndefined();
 }
 
-static RValue builtinFileTextEof(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinFileTextEof(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeBool(true);
+    Runner* runner = (Runner*) ctx->runner;
     int32_t handle = RValue_toInt32(args[0]);
-    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !openTextFiles[handle].isOpen) return RValue_makeBool(true);
+    if (0 > handle || handle >= MAX_OPEN_TEXT_FILES || !runner->openTextFiles[handle].isOpen) return RValue_makeBool(true);
 
-    OpenTextFile* file = &openTextFiles[handle];
+    OpenTextFile* file = &runner->openTextFiles[handle];
     return RValue_makeBool(file->readPos >= file->contentLen);
 }
 
@@ -4571,14 +4560,15 @@ static RValue builtinStringHashToNewline(MAYBE_UNUSED VMContext* ctx, RValue* ar
 }
 
 // json_decode
-static RValue builtinJsonDecode(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinJsonDecode(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) {
         fprintf(stderr, "[json_decode] Expected at least 1 argument\n");
         return RValue_makeUndefined();
     }
 
-    int32_t mapIndex = dsMapCreate();
-    DsMapEntry **mapPtr = dsMapGet(mapIndex);
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t mapIndex = dsMapCreate(runner);
+    DsMapEntry **mapPtr = dsMapGet(runner, mapIndex);
     const char* content = args[0].string;
     const JsonValue* json = JsonReader_parse(content);
 
@@ -5190,27 +5180,3 @@ void VMBuiltins_registerAll(VMContext* ctx, bool isGMS2) {
     VM_registerBuiltin(ctx, "asset_get_index", builtinAssetGetIndex);
 }
 
-void VMBuiltins_free(void) {
-    // Free ds_map pool
-    repeat((int32_t) arrlen(dsMapPool), i) {
-        DsMapEntry* map = dsMapPool[i];
-        if (map != nullptr) {
-            repeat(shlen(map), j) {
-                free(map[j].key);
-                RValue_free(&map[j].value);
-            }
-            shfree(map);
-        }
-    }
-    arrfree(dsMapPool);
-
-    // Free ds_list pool
-    repeat((int32_t) arrlen(dsListPool), i) {
-        DsList* list = &dsListPool[i];
-        repeat(arrlen(list->items), j) {
-            RValue_free(&list->items[j]);
-        }
-        arrfree(list->items);
-    }
-    arrfree(dsListPool);
-}
