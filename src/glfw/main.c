@@ -360,6 +360,9 @@ static void keyCallback(GLFWwindow* window, int key, int scancode, int action, i
     // GLFW_REPEAT is ignored (GML doesn't use key repeat)
 }
 
+typedef struct { int key; struct sigaction value; } PreviousSignalActionEntry;
+static PreviousSignalActionEntry* previousSignalActions = nullptr;
+
 void saveInputRecording() {
     // Save input recording if active, then free
     if (globalInputRecording != nullptr) {
@@ -369,6 +372,13 @@ void saveInputRecording() {
         InputRecording_free(globalInputRecording);
         globalInputRecording = nullptr;
     }
+}
+
+static void onCrashSignal(int sig) {
+    saveInputRecording();
+    // Restore the previous handler (ASAN) and re-raise so it can report the fault
+    sigaction(sig, &previousSignalActions[hmgeti(previousSignalActions, sig)].value, nullptr);
+    raise(sig);
 }
 
 // ===[ MAIN ]===
@@ -567,8 +577,13 @@ int main(int argc, char* argv[]) {
     glfwSetWindowUserPointer(window, runner);
     glfwSetKeyCallback(window, keyCallback);
 
-    signal(SIGABRT, saveInputRecording);
-    signal(SIGSEGV, saveInputRecording);
+    struct sigaction sa = { .sa_handler = onCrashSignal };
+    sigemptyset(&sa.sa_mask);
+    struct sigaction prev;
+    sigaction(SIGABRT, &sa, &prev);
+    hmput(previousSignalActions, SIGABRT, prev);
+    sigaction(SIGSEGV, &sa, &prev);
+    hmput(previousSignalActions, SIGSEGV, prev);
 
     // Initialize the first room and fire Game Start / Room Start events
     Runner_initFirstRoom(runner);
