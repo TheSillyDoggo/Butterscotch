@@ -1125,7 +1125,7 @@ static void handlePop(VMContext* ctx, uint32_t instr, const uint8_t* extraData) 
     int32_t originalInstanceType = instanceType;
     if (varType == VARTYPE_ARRAY) {
         if (type1 == GML_TYPE_VARIABLE) {
-            // Simple assignment (Pop.v.v): stack bottom-to-top = [value, instanceType, arrayIndex]
+            // Simple assignment (Pop.v.v): stack bottom-to-top = [value, (realInstance,) instanceType, arrayIndex]
             RValue arrayIdxVal = stackPop(ctx);
             arrayIndex = RValue_toInt32(arrayIdxVal);
             RValue_free(&arrayIdxVal);
@@ -1133,10 +1133,17 @@ static void handlePop(VMContext* ctx, uint32_t instr, const uint8_t* extraData) 
             RValue instTypeVal = stackPop(ctx);
             instanceType = RValue_toInt32(instTypeVal);
             RValue_free(&instTypeVal);
+
+            // BC17: -9 (INSTANCE_STACKTOP) means "pop again for the real instance ID/object index" (e.g. `su_actor.specialsprite[0] = ...`)
+            if (instanceType == INSTANCE_STACKTOP) {
+                RValue realInst = stackPop(ctx);
+                instanceType = RValue_toInt32(realInst);
+                RValue_free(&realInst);
+            }
 
             val = stackPop(ctx);
         } else {
-            // Compound assignment (Pop.i.v, etc.): stack bottom-to-top = [instanceType, arrayIndex, value]
+            // Compound assignment (Pop.i.v, etc.): stack bottom-to-top = [(realInstance,) instanceType, arrayIndex, value]
             val = stackPop(ctx);
 
             RValue arrayIdxVal = stackPop(ctx);
@@ -1146,6 +1153,13 @@ static void handlePop(VMContext* ctx, uint32_t instr, const uint8_t* extraData) 
             RValue instTypeVal = stackPop(ctx);
             instanceType = RValue_toInt32(instTypeVal);
             RValue_free(&instTypeVal);
+
+            // BC17: -9 (INSTANCE_STACKTOP) means "pop again for the real instance ID/object index"
+            if (instanceType == INSTANCE_STACKTOP) {
+                RValue realInst = stackPop(ctx);
+                instanceType = RValue_toInt32(realInst);
+                RValue_free(&realInst);
+            }
         }
     } else if (varType == VARTYPE_STACKTOP && type1 == GML_TYPE_VARIABLE) {
         // Simple assignment (Pop.v.v) with STACKTOP: stack bottom-to-top = [value, instanceType]
