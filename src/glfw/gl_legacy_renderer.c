@@ -566,8 +566,10 @@ static void glDrawText(Renderer* renderer, const char* text, float x, float y, f
     // Count lines, treating \r\n and \n\r as single breaks
     int32_t lineCount = TextUtils_countLines(text, textLen);
 
+    float lineStride = TextUtils_lineStride(font);
+
     // Vertical alignment offset
-    float totalHeight = (float) lineCount * (float) font->emSize;
+    float totalHeight = (float) lineCount * lineStride;
     float valignOffset = 0;
     if (renderer->drawValign == 1) valignOffset = -totalHeight / 2.0f;
     else if (renderer->drawValign == 2) valignOffset = -totalHeight;
@@ -577,8 +579,8 @@ static void glDrawText(Renderer* renderer, const char* text, float x, float y, f
     Matrix4f transform;
     Matrix4f_setTransform2D(&transform, x, y, xscale * font->scaleX, yscale * font->scaleY, angleRad);
 
-    // Iterate through lines
-    float cursorY = valignOffset;
+    // Iterate through lines. HTML5 subtracts ascenderOffset from per-line y offset.
+    float cursorY = valignOffset - (float) font->ascenderOffset;
     int32_t lineStart = 0;
 
     for (int32_t lineIdx = 0; lineCount > lineIdx; lineIdx++) {
@@ -659,7 +661,7 @@ static void glDrawText(Renderer* renderer, const char* text, float x, float y, f
             }
         }
 
-        cursorY += (float) font->emSize;
+        cursorY += lineStride;
         // Skip past the newline, treating \r\n and \n\r as single breaks
         if (textLen > lineEnd) {
             lineStart = TextUtils_skipNewline(text, lineEnd, textLen);
@@ -687,8 +689,10 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
     // Count lines, treating \r\n and \n\r as single breaks
     int32_t lineCount = TextUtils_countLines(text, textLen);
 
+    float lineStride = TextUtils_lineStride(font);
+
     // Vertical alignment offset
-    float totalHeight = (float) lineCount * (float) font->emSize;
+    float totalHeight = (float) lineCount * lineStride;
     float valignOffset = 0;
     if (renderer->drawValign == 1) valignOffset = -totalHeight / 2.0f;
     else if (renderer->drawValign == 2) valignOffset = -totalHeight;
@@ -698,8 +702,8 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
     Matrix4f transform;
     Matrix4f_setTransform2D(&transform, x, y, xscale * font->scaleX, yscale * font->scaleY, angleRad);
 
-    // Iterate through lines
-    float cursorY = valignOffset;
+    // Iterate through lines. HTML5 subtracts ascenderOffset from per-line y offset.
+    float cursorY = valignOffset - (float) font->ascenderOffset;
     int32_t lineStart = 0;
 
     // get delta's  (16.16 format)
@@ -816,7 +820,7 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
 		    c1 = c2;    //
         }
 
-        cursorY += (float) font->emSize;
+        cursorY += lineStride;
         // Skip past the newline, treating \r\n and \n\r as single breaks
         if (textLen > lineEnd) {
             lineStart = TextUtils_skipNewline(text, lineEnd, textLen);

@@ -4424,7 +4424,8 @@ static RValue builtin_stringHeight(VMContext* ctx, RValue* args, int32_t argCoun
     PreprocessedText_free(processed);
     free(str);
 
-    return RValue_makeReal((GMLReal) ((float) lineCount * (float) font->emSize * font->scaleY));
+    // Match HTML5 runner: string_height = lines * TextHeight('M') = lines * max_glyph_height * scaleY.
+    return RValue_makeReal((GMLReal) ((float) lineCount * TextUtils_lineStride(font) * font->scaleY));
 }
 
 STUB_RETURN_ZERO(string_width_ext)
@@ -5170,8 +5171,10 @@ static RValue fontAddSpriteImpl(VMContext* ctx, int32_t spriteIndex, uint16_t* c
     font->textureOffset = 0; // not used for sprite fonts
     font->scaleX = 1.0f;
     font->scaleY = 1.0f;
+    font->ascenderOffset = 0;
     font->glyphCount = totalGlyphs;
     font->glyphs = glyphs;
+    font->maxGlyphHeight = maxHeight; // match what HTML5 runner uses for line stride
     font->isSpriteFont = true;
     font->spriteIndex = spriteIndex;
 

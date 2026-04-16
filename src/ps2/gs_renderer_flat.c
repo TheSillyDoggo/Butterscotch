@@ -205,12 +205,13 @@ static void gsDrawText(Renderer* renderer, const char* text, float x, float y, f
 
     // Compute vertical alignment offset
     int32_t lineCount = TextUtils_countLines(text, textLen);
-    float totalHeight = (float) lineCount * (float) font->emSize;
+    float lineStride = TextUtils_lineStride(font);
+    float totalHeight = (float) lineCount * lineStride;
     float valignOffset = 0;
     if (renderer->drawValign == 1) valignOffset = -totalHeight / 2.0f;
     else if (renderer->drawValign == 2) valignOffset = -totalHeight;
 
-    float cursorY = valignOffset;
+    float cursorY = valignOffset - (float) font->ascenderOffset;
     int32_t lineStart = 0;
 
     while (textLen >= lineStart) {
@@ -267,7 +268,7 @@ static void gsDrawText(Renderer* renderer, const char* text, float x, float y, f
         gs->zCounter++;
 
         // Advance to next line
-        cursorY += (float) font->emSize;
+        cursorY += lineStride;
         if (textLen > lineEnd) {
             lineStart = TextUtils_skipNewline(text, lineEnd, textLen);
         } else {

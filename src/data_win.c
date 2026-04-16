@@ -768,6 +768,7 @@ static void parseFONT(BinaryReader* reader, DataWin* dw) {
         font->textureOffset = BinaryReader_readUint32(reader);
         font->scaleX = BinaryReader_readFloat32(reader);
         font->scaleY = BinaryReader_readFloat32(reader);
+        font->ascenderOffset = 0; // default for BC < 17
         if (dw->gen8.bytecodeVersion >= 17) {
             font->ascenderOffset = BinaryReader_readInt32(reader);
         }
@@ -779,6 +780,7 @@ static void parseFONT(BinaryReader* reader, DataWin* dw) {
         uint32_t* glyphPtrs = readPointerTable(reader, &glyphCount);
         font->glyphCount = glyphCount;
 
+        uint32_t maxGlyphHeight = 0;
         if (glyphCount > 0) {
             font->glyphs = safeMalloc(glyphCount * sizeof(FontGlyph));
             repeat(glyphCount, j) {
@@ -791,6 +793,8 @@ static void parseFONT(BinaryReader* reader, DataWin* dw) {
                 glyph->sourceHeight = BinaryReader_readUint16(reader);
                 glyph->shift = BinaryReader_readInt16(reader);
                 glyph->offset = BinaryReader_readInt16(reader);
+
+                if (glyph->sourceHeight > maxGlyphHeight) maxGlyphHeight = glyph->sourceHeight;
 
                 // Kerning SimpleListShort (uint16 count)
                 glyph->kerningCount = BinaryReader_readUint16(reader);
@@ -807,6 +811,7 @@ static void parseFONT(BinaryReader* reader, DataWin* dw) {
         } else {
             font->glyphs = nullptr;
         }
+        font->maxGlyphHeight = maxGlyphHeight;
         free(glyphPtrs);
     }
     free(ptrs);

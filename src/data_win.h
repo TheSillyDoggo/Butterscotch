@@ -357,6 +357,7 @@ typedef struct {
     int32_t ascenderOffset; // bytecodeVersion >= 17 only
     uint32_t glyphCount;
     FontGlyph* glyphs;
+    uint32_t maxGlyphHeight; // Computed after glyph parse: max sourceHeight across glyphs; HTML5 runner uses this for line stride (see yyFont.TextHeight)
     // Sprite font fields (only valid when isSpriteFont is true)
     bool isSpriteFont;
     int32_t spriteIndex; // source sprite index (-1 for regular fonts)

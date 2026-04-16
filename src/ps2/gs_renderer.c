@@ -1290,14 +1290,15 @@ static void gsDrawText(Renderer* renderer, const char* text, float x, float y, f
 
     // Vertical alignment
     int32_t lineCount = TextUtils_countLines(text, textLen);
+    float lineStride = TextUtils_lineStride(font);
     float valignOffset = 0;
     if (renderer->drawValign != 0) {
-        float totalHeight = (float) lineCount * (float) font->emSize;
+        float totalHeight = (float) lineCount * lineStride;
         if (renderer->drawValign == 1) valignOffset = -totalHeight / 2.0f;
         else if (renderer->drawValign == 2) valignOffset = -totalHeight;
     }
 
-    float cursorY = valignOffset;
+    float cursorY = valignOffset - (float) font->ascenderOffset;
     int32_t lineStart = 0;
 
     while (textLen >= lineStart) {
@@ -1368,7 +1369,7 @@ static void gsDrawText(Renderer* renderer, const char* text, float x, float y, f
         gs->zCounter++;
 
         // Next line
-        cursorY += (float) font->emSize;
+        cursorY += lineStride;
         if (textLen > lineEnd) {
             lineStart = TextUtils_skipNewline(text, lineEnd, textLen);
         } else {
@@ -1393,12 +1394,13 @@ static void gsDrawTextColor(Renderer* renderer, const char* text, float x, float
 
     // Vertical alignment
     int32_t lineCount = TextUtils_countLines(text, textLen);
-    float totalHeight = (float) lineCount * (float) font->emSize;
+    float lineStride = TextUtils_lineStride(font);
+    float totalHeight = (float) lineCount * lineStride;
     float valignOffset = 0;
     if (renderer->drawValign == 1) valignOffset = -totalHeight / 2.0f;
     else if (renderer->drawValign == 2) valignOffset = -totalHeight;
 
-    float cursorY = valignOffset;
+    float cursorY = valignOffset - (float) font->ascenderOffset;
     int32_t lineStart = 0;
 
     // get delta's  (16.16 format)
@@ -1529,7 +1531,7 @@ static void gsDrawTextColor(Renderer* renderer, const char* text, float x, float
         gs->zCounter++;
 
         // Next line
-        cursorY += (float) font->emSize;
+        cursorY += lineStride;
         if (textLen > lineEnd) {
             lineStart = TextUtils_skipNewline(text, lineEnd, textLen);
         } else {

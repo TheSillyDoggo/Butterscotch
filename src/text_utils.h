@@ -63,6 +63,16 @@ static inline uint16_t TextUtils_decodeUtf8(const char* str, int32_t len, int32_
     return 0xFFFD;
 }
 
+// Line stride used for multi-line text. Matches HTML5 runner behavior:
+// - When `linesep` is not provided to draw_text, it defaults to `font.TextHeight('M')`
+//   which is `max_glyph_height * scaleY`. We apply scaleY via the transform matrix already,
+//   so we return the raw max glyph height here.
+// - Falls back to emSize only if the font has no glyphs recorded.
+static inline float TextUtils_lineStride(Font* font) {
+    if (font->maxGlyphHeight > 0) return (float) font->maxGlyphHeight;
+    return font->emSize;
+}
+
 static inline float TextUtils_measureLineWidth(Font* font, const char* line, int32_t len) {
     float width = 0;
     int32_t pos = 0;
