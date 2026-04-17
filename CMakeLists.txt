@@ -19,6 +19,22 @@ if(PLATFORM STREQUAL "")
     message(FATAL_ERROR "PLATFORM is not set! Use -DPLATFORM=glfw (or another supported platform).")
 endif()
 
+# To avoid unused code in production builds that are only used for a single game (example: PlayStation 2 target), we can enable/disable specific bytecode versions
+#
+# If only a single bytecode version is enabled, the checks will be collapsed and removed by the compiler during build time, reducing code size and improving
+# performance on low end hardware!
+option(ENABLE_BC16 "Enable support for Bytecode Version 16" ON)
+option(ENABLE_BC17 "Enable support for Bytecode Version 17" ON)
+if(NOT ENABLE_BC16 AND NOT ENABLE_BC17)
+    message(FATAL_ERROR "You need to build Butterscotch with at least one bytecode version enabled!")
+endif()
+if(ENABLE_BC16)
+    add_compile_definitions(ENABLE_BC16)
+endif()
+if(ENABLE_BC17)
+    add_compile_definitions(ENABLE_BC17)
+endif()
+
 file(GLOB SOURCES src/*.c)
 # Platform specific files builds
 file(GLOB PLATFORM_SOURCES src/${PLATFORM}/*.c)
