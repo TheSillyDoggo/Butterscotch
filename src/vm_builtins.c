@@ -1626,6 +1626,46 @@ static RValue builtinVariableInstanceSet(VMContext* ctx, RValue* args, int32_t a
     return RValue_makeUndefined();
 }
 
+static bool variableInstanceExistsOn(VMContext* ctx, Instance* target, const char* name) {
+    if (VMBuiltins_resolveBuiltinVarId(name) != BUILTIN_VAR_UNKNOWN) return true;
+    int32_t varID = -1;
+    forEach(Variable, v, ctx->dataWin->vari.variables, ctx->dataWin->vari.variableCount) {
+        if (v->varID >= 0 && (v->instanceType == INSTANCE_SELF || 0 > v->instanceType) && strcmp(v->name, name) == 0) {
+            varID = v->varID;
+            break;
+        }
+    }
+    if (0 > varID) return false;
+    return hmgeti(target->selfVars, varID) >= 0;
+}
+
+static RValue builtinVariableInstanceExists(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (2 > argCount || args[1].type != RVALUE_STRING) return RValue_makeBool(false);
+    int32_t id = RValue_toInt32(args[0]);
+    const char* name = args[1].string;
+
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t instanceCount = (int32_t) arrlen(runner->instances);
+
+    if (id >= 100000) {
+        repeat(instanceCount, i) {
+            Instance* inst = runner->instances[i];
+            if (inst->active && (int32_t) inst->instanceId == id) {
+                return RValue_makeBool(variableInstanceExistsOn(ctx, inst, name));
+            }
+        }
+        return RValue_makeBool(false);
+    }
+
+    repeat(instanceCount, i) {
+        Instance* inst = runner->instances[i];
+        if (inst->active && VM_isObjectOrDescendant(ctx->dataWin, inst->objectIndex, id)) {
+            return RValue_makeBool(variableInstanceExistsOn(ctx, inst, name));
+        }
+    }
+    return RValue_makeBool(false);
+}
+
 // ===[ METHOD ]===
 
 #if IS_BC17_OR_HIGHER_ENABLED
@@ -6015,6 +6055,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "variable_global_set", builtinVariableGlobalSet);
     VM_registerBuiltin(ctx, "variable_instance_set", builtinVariableInstanceSet);
     VM_registerBuiltin(ctx, "variable_instance_get", builtinVariableInstanceGet);
+    VM_registerBuiltin(ctx, "variable_instance_exists", builtinVariableInstanceExists);
 
     // Script
     VM_registerBuiltin(ctx, "script_execute", builtinScriptExecute);
