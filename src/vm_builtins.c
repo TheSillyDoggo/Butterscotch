@@ -4181,22 +4181,6 @@ static RValue builtin_drawSpritePartExt(VMContext* ctx, RValue* args, MAYBE_UNUS
         subimg = (int32_t) ((Instance*) ctx->currentInstance)->imageIndex;
     }
 
-    // DEBUG: log args + caller instance state so we can see sprite_width vs. sprite.width vs. bounding box.
-    {
-        Instance* inst = (Instance*) ctx->currentInstance;
-        const char* sprName = "?";
-        uint32_t sprW = 0, sprH = 0;
-        if (spriteIndex >= 0 && runner->dataWin->sprt.count > (uint32_t) spriteIndex) {
-            Sprite* sp = &runner->dataWin->sprt.sprites[spriteIndex];
-            sprName = sp->name ? sp->name : "?";
-            sprW = sp->width;
-            sprH = sp->height;
-        }
-        fprintf(stderr, "draw_sprite_part_ext spriteIndex=%d name=%s sprtWH=(%u,%u) subimg=%d reqSrc=(%d,%d,%d,%d) x=%.1f y=%.1f scale=(%.2f,%.2f) instImageScale=(%.2f,%.2f)\n",
-                spriteIndex, sprName, sprW, sprH, subimg, left, top, width, height, x, y, xscale, yscale,
-                inst ? (double) inst->imageXscale : 0.0, inst ? (double) inst->imageYscale : 0.0);
-    }
-
     Renderer_drawSpritePartExt(runner->renderer, spriteIndex, subimg, left, top, width, height, x, y, xscale, yscale, color, alpha);
     return RValue_makeUndefined();
 }
