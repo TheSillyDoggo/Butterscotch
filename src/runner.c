@@ -1001,6 +1001,14 @@ static void cleanupState(Runner* runner) {
     }
     runner->savedRoomStates = nullptr;
 
+    // Free struct instances (created via @@NewGMLObject@@)
+    repeat(arrlen(runner->structInstances), i) {
+        hmdel(runner->instancesToId, runner->structInstances[i]->instanceId);
+        Instance_free(runner->structInstances[i]);
+    }
+    arrfree(runner->structInstances);
+    runner->structInstances = nullptr;
+
     hmfree(runner->instancesToId);
     runner->instancesToId = nullptr;
     hmfree(runner->tileLayerMap);

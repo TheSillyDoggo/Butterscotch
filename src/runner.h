@@ -274,6 +274,9 @@ typedef struct Runner {
     // The real runner uses a persistent YYObjectBase for this, the YYObjectBase is a "parent" of Instance
     // For now, we'll use a dummy Instance with objectIndex = -1 as a hack
     Instance* globalScopeInstance;
+    // Struct instances created by @@NewGMLObject@@. Reuses Instance with objectIndex=-1.
+    // Tracked separately so event/step/draw iteration over runner->instances stays clean.
+    Instance** structInstances;
     int32_t forcedDepth;
 
     // ===[ Builtin function state ]===

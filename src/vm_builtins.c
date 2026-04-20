@@ -5880,6 +5880,60 @@ static RValue builtinOther(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUS
     return RValue_makeInt32((int32_t) inst->instanceId);
 }
 
+#if IS_BC17_OR_HIGHER_ENABLED
+// @@NullObject@@ - GMS2 internal sentinel pushed before "method()" when the GML source is a struct literal or anonymous constructor: the bound self is "nothing yet", and @@NewGMLObject@@ rebinds to the fresh struct.
+// We encode it as INSTANCE_NOONE so "method()" stores it as is (its -1 -> current remap does not fire).
+static RValue builtinNullObject(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    return RValue_makeInt32(INSTANCE_NOONE);
+}
+
+// @@NewGMLObject@@(methodRef, ...args) - GMS2 internal function that allocates a fresh struct instance, runs the constructor method against it, and returns the new instance ID.
+// We reuse Instance (with objectIndex = -1) the same way globalScopeInstance is used for GLOB scripts, instead of introducing a separate struct type.
+static RValue builtinNewGMLObject(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) {
+        fprintf(stderr, "VM: @@NewGMLObject@@ called with no arguments\n");
+        return RValue_makeUndefined();
+    }
+
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t codeIndex;
+    if (args[0].type == RVALUE_METHOD && args[0].method != nullptr) {
+        codeIndex = args[0].method->codeIndex;
+    } else {
+        // Raw funcIdx pushed via "Push.i <funcIdx>; Conv.i.v" (no method() wrapper used when no static binding is needed).
+        // Resolve via FUNC chunk name -> funcMap, matching builtinMethod's lookup.
+        int32_t rawArg = RValue_toInt32(args[0]);
+        codeIndex = rawArg;
+        if (rawArg >= 0 && (uint32_t) rawArg < ctx->dataWin->func.functionCount) {
+            const char* funcName = ctx->dataWin->func.functions[rawArg].name;
+            if (funcName != nullptr) {
+                ptrdiff_t idx = shgeti(ctx->funcMap, (char*) funcName);
+                if (idx >= 0) codeIndex = ctx->funcMap[idx].value;
+            }
+        }
+    }
+    if (0 > codeIndex || (uint32_t) codeIndex > ctx->dataWin->code.count) {
+        fprintf(stderr, "VM: @@NewGMLObject@@ method has invalid codeIndex %d\n", codeIndex);
+        return RValue_makeUndefined();
+    }
+
+    Instance* structInst = Instance_create(runner->nextInstanceId++, -1, 0, 0);
+    hmput(runner->instancesToId, structInst->instanceId, structInst);
+    arrput(runner->structInstances, structInst);
+
+    Instance* savedSelf = (Instance*) ctx->currentInstance;
+    ctx->currentInstance = structInst;
+
+    RValue* ctorArgs = (argCount > 1) ? &args[1] : nullptr;
+    int32_t ctorArgCount = argCount - 1;
+    RValue result = VM_callCodeIndex(ctx, codeIndex, ctorArgs, ctorArgCount);
+    RValue_free(&result);
+
+    ctx->currentInstance = savedSelf;
+    return RValue_makeInt32((int32_t) structInst->instanceId);
+}
+#endif
+
 // ===[ PATH FUNCTIONS ]===
 
 // path_start(path, speed, endaction, absolute) - HTML5: Assign_Path (yyInstance.js:2695-2743)
@@ -6648,6 +6702,10 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "@@NewGMLArray@@", builtinNewGMLArray);
     VM_registerBuiltin(ctx, "@@This@@", builtinThis);
     VM_registerBuiltin(ctx, "@@Other@@", builtinOther);
+#if IS_BC17_OR_HIGHER_ENABLED
+    VM_registerBuiltin(ctx, "@@NullObject@@", builtinNullObject);
+    VM_registerBuiltin(ctx, "@@NewGMLObject@@", builtinNewGMLObject);
+#endif
 
     // Path
     VM_registerBuiltin(ctx, "path_start", builtinPathStart);
