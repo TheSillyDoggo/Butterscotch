@@ -2697,6 +2697,8 @@ VMContext* VM_create(DataWin* dataWin) {
         requireMessageFormatted(MAX_CODE_LOCALS > entry->localsCount, "Code %s has too many locals!", entry->name);
     }
 
+    VMBuiltins_checkIfBuiltinVarTableIsSorted();
+
     // Pre-resolve built-in variable IDs (replaces runtime strcmp chains with O(1) switch dispatch)
     repeat(dataWin->vari.variableCount, i) {
         Variable* var = &dataWin->vari.variables[i];

@@ -104,207 +104,200 @@ static bool isValidAlarmIndex(int alarmIndex) {
     return alarmIndex >= 0 && GML_ALARM_COUNT > alarmIndex;
 }
 
+// Sorted (strcmp-order, LC_ALL=C) table of built-in variable names -> enum IDs.
+// We use bsearch instead of a HashMap because we don't have *that* many builtin var entries, so it is faster to use bsearch than a HashMap.
+// IMPORTANT: Entries MUST stay sorted by name for bsearch to work!
+typedef struct {
+    const char* name;
+    int16_t id;
+} BuiltinVarEntry;
+
+static const BuiltinVarEntry BUILTIN_VAR_TABLE[] = {
+    { "alarm", BUILTIN_VAR_ALARM },
+    { "application_surface", BUILTIN_VAR_APPLICATION_SURFACE },
+    { "argument", BUILTIN_VAR_ARGUMENT },
+    { "argument0", BUILTIN_VAR_ARGUMENT0 },
+    { "argument1", BUILTIN_VAR_ARGUMENT1 },
+    { "argument10", BUILTIN_VAR_ARGUMENT10 },
+    { "argument11", BUILTIN_VAR_ARGUMENT11 },
+    { "argument12", BUILTIN_VAR_ARGUMENT12 },
+    { "argument13", BUILTIN_VAR_ARGUMENT13 },
+    { "argument14", BUILTIN_VAR_ARGUMENT14 },
+    { "argument15", BUILTIN_VAR_ARGUMENT15 },
+    { "argument2", BUILTIN_VAR_ARGUMENT2 },
+    { "argument3", BUILTIN_VAR_ARGUMENT3 },
+    { "argument4", BUILTIN_VAR_ARGUMENT4 },
+    { "argument5", BUILTIN_VAR_ARGUMENT5 },
+    { "argument6", BUILTIN_VAR_ARGUMENT6 },
+    { "argument7", BUILTIN_VAR_ARGUMENT7 },
+    { "argument8", BUILTIN_VAR_ARGUMENT8 },
+    { "argument9", BUILTIN_VAR_ARGUMENT9 },
+    { "argument_count", BUILTIN_VAR_ARGUMENT_COUNT },
+    { "background_alpha", BUILTIN_VAR_BACKGROUND_ALPHA },
+    { "background_color", BUILTIN_VAR_BACKGROUND_COLOR },
+    { "background_colour", BUILTIN_VAR_BACKGROUND_COLOUR },
+    { "background_height", BUILTIN_VAR_BACKGROUND_HEIGHT },
+    { "background_hspeed", BUILTIN_VAR_BACKGROUND_HSPEED },
+    { "background_index", BUILTIN_VAR_BACKGROUND_INDEX },
+    { "background_visible", BUILTIN_VAR_BACKGROUND_VISIBLE },
+    { "background_vspeed", BUILTIN_VAR_BACKGROUND_VSPEED },
+    { "background_width", BUILTIN_VAR_BACKGROUND_WIDTH },
+    { "background_x", BUILTIN_VAR_BACKGROUND_X },
+    { "background_y", BUILTIN_VAR_BACKGROUND_Y },
+    { "bbox_bottom", BUILTIN_VAR_BBOX_BOTTOM },
+    { "bbox_left", BUILTIN_VAR_BBOX_LEFT },
+    { "bbox_right", BUILTIN_VAR_BBOX_RIGHT },
+    { "bbox_top", BUILTIN_VAR_BBOX_TOP },
+    { "buffer_bool", BUILTIN_VAR_BUFFER_BOOL },
+    { "buffer_f16", BUILTIN_VAR_BUFFER_F16 },
+    { "buffer_f32", BUILTIN_VAR_BUFFER_F32 },
+    { "buffer_f64", BUILTIN_VAR_BUFFER_F64 },
+    { "buffer_fast", BUILTIN_VAR_BUFFER_FAST },
+    { "buffer_fixed", BUILTIN_VAR_BUFFER_FIXED },
+    { "buffer_grow", BUILTIN_VAR_BUFFER_GROW },
+    { "buffer_s16", BUILTIN_VAR_BUFFER_S16 },
+    { "buffer_s32", BUILTIN_VAR_BUFFER_S32 },
+    { "buffer_s8", BUILTIN_VAR_BUFFER_S8 },
+    { "buffer_seek_end", BUILTIN_VAR_BUFFER_SEEK_END },
+    { "buffer_seek_relative", BUILTIN_VAR_BUFFER_SEEK_RELATIVE },
+    { "buffer_seek_start", BUILTIN_VAR_BUFFER_SEEK_START },
+    { "buffer_string", BUILTIN_VAR_BUFFER_STRING },
+    { "buffer_text", BUILTIN_VAR_BUFFER_TEXT },
+    { "buffer_u16", BUILTIN_VAR_BUFFER_U16 },
+    { "buffer_u32", BUILTIN_VAR_BUFFER_U32 },
+    { "buffer_u64", BUILTIN_VAR_BUFFER_U64 },
+    { "buffer_u8", BUILTIN_VAR_BUFFER_U8 },
+    { "buffer_wrap", BUILTIN_VAR_BUFFER_WRAP },
+    { "current_time", BUILTIN_VAR_CURRENT_TIME },
+    { "debug_mode", BUILTIN_VAR_DEBUG_MODE },
+    { "depth", BUILTIN_VAR_DEPTH },
+    { "direction", BUILTIN_VAR_DIRECTION },
+    { "false", BUILTIN_VAR_FALSE },
+    { "fps", BUILTIN_VAR_FPS },
+    { "friction", BUILTIN_VAR_FRICTION },
+    { "gravity", BUILTIN_VAR_GRAVITY },
+    { "gravity_direction", BUILTIN_VAR_GRAVITY_DIRECTION },
+    { "hspeed", BUILTIN_VAR_HSPEED },
+    { "id", BUILTIN_VAR_ID },
+    { "image_alpha", BUILTIN_VAR_IMAGE_ALPHA },
+    { "image_angle", BUILTIN_VAR_IMAGE_ANGLE },
+    { "image_blend", BUILTIN_VAR_IMAGE_BLEND },
+    { "image_index", BUILTIN_VAR_IMAGE_INDEX },
+    { "image_number", BUILTIN_VAR_IMAGE_NUMBER },
+    { "image_speed", BUILTIN_VAR_IMAGE_SPEED },
+    { "image_xscale", BUILTIN_VAR_IMAGE_XSCALE },
+    { "image_yscale", BUILTIN_VAR_IMAGE_YSCALE },
+    { "keyboard_key", BUILTIN_VAR_KEYBOARD_KEY },
+    { "keyboard_lastchar", BUILTIN_VAR_KEYBOARD_LASTCHAR },
+    { "keyboard_lastkey", BUILTIN_VAR_KEYBOARD_LASTKEY },
+    { "mask_index", BUILTIN_VAR_MASK_INDEX },
+    { "object_index", BUILTIN_VAR_OBJECT_INDEX },
+    { "os_3ds", BUILTIN_VAR_OS_3DS },
+    { "os_amazon", BUILTIN_VAR_OS_AMAZON },
+    { "os_android", BUILTIN_VAR_OS_ANDROID },
+    { "os_bb10", BUILTIN_VAR_OS_BB10 },
+    { "os_ios", BUILTIN_VAR_OS_IOS },
+    { "os_linux", BUILTIN_VAR_OS_LINUX },
+    { "os_llvm_android", BUILTIN_VAR_OS_LLVM_ANDROID },
+    { "os_llvm_ios", BUILTIN_VAR_OS_LLVM_IOS },
+    { "os_llvm_linux", BUILTIN_VAR_OS_LLVM_LINUX },
+    { "os_llvm_macosx", BUILTIN_VAR_OS_LLVM_MACOSX },
+    { "os_llvm_psp", BUILTIN_VAR_OS_LLVM_PSP },
+    { "os_llvm_symbian", BUILTIN_VAR_OS_LLVM_SYMBIAN },
+    { "os_llvm_win32", BUILTIN_VAR_OS_LLVM_WIN32 },
+    { "os_llvm_winphone", BUILTIN_VAR_OS_LLVM_WINPHONE },
+    { "os_macosx", BUILTIN_VAR_OS_MACOSX },
+    { "os_ps3", BUILTIN_VAR_OS_PS3 },
+    { "os_ps4", BUILTIN_VAR_OS_PS4 },
+    { "os_psp", BUILTIN_VAR_OS_PSP },
+    { "os_psvita", BUILTIN_VAR_OS_PSVITA },
+    { "os_switch", BUILTIN_VAR_OS_SWITCH },
+    { "os_symbian", BUILTIN_VAR_OS_SYMBIAN },
+    { "os_tizen", BUILTIN_VAR_OS_TIZEN },
+    { "os_type", BUILTIN_VAR_OS_TYPE },
+    { "os_unknown", BUILTIN_VAR_OS_UNKNOWN },
+    { "os_uwp", BUILTIN_VAR_OS_UWP },
+    { "os_wiiu", BUILTIN_VAR_OS_WIIU },
+    { "os_win32", BUILTIN_VAR_OS_WIN32 },
+    { "os_win8native", BUILTIN_VAR_OS_WIN8NATIVE },
+    { "os_windows", BUILTIN_VAR_OS_WINDOWS },
+    { "os_winphone", BUILTIN_VAR_OS_WINPHONE },
+    { "os_xbox360", BUILTIN_VAR_OS_XBOX360 },
+    { "os_xboxone", BUILTIN_VAR_OS_XBOXONE },
+    { "path_action_continue", BUILTIN_VAR_PATH_ACTION_CONTINUE },
+    { "path_action_restart", BUILTIN_VAR_PATH_ACTION_RESTART },
+    { "path_action_reverse", BUILTIN_VAR_PATH_ACTION_REVERSE },
+    { "path_action_stop", BUILTIN_VAR_PATH_ACTION_STOP },
+    { "path_endaction", BUILTIN_VAR_PATH_ENDACTION },
+    { "path_index", BUILTIN_VAR_PATH_INDEX },
+    { "path_orientation", BUILTIN_VAR_PATH_ORIENTATION },
+    { "path_position", BUILTIN_VAR_PATH_POSITION },
+    { "path_positionprevious", BUILTIN_VAR_PATH_POSITIONPREVIOUS },
+    { "path_scale", BUILTIN_VAR_PATH_SCALE },
+    { "path_speed", BUILTIN_VAR_PATH_SPEED },
+    { "persistent", BUILTIN_VAR_PERSISTENT },
+    { "pi", BUILTIN_VAR_PI },
+    { "room", BUILTIN_VAR_ROOM },
+    { "room_first", BUILTIN_VAR_ROOM_FIRST },
+    { "room_height", BUILTIN_VAR_ROOM_HEIGHT },
+    { "room_persistent", BUILTIN_VAR_ROOM_PERSISTENT },
+    { "room_speed", BUILTIN_VAR_ROOM_SPEED },
+    { "room_width", BUILTIN_VAR_ROOM_WIDTH },
+    { "solid", BUILTIN_VAR_SOLID },
+    { "speed", BUILTIN_VAR_SPEED },
+    { "sprite_height", BUILTIN_VAR_SPRITE_HEIGHT },
+    { "sprite_index", BUILTIN_VAR_SPRITE_INDEX },
+    { "sprite_width", BUILTIN_VAR_SPRITE_WIDTH },
+    { "sprite_xoffset", BUILTIN_VAR_SPRITE_XOFFSET },
+    { "sprite_yoffset", BUILTIN_VAR_SPRITE_YOFFSET },
+    { "true", BUILTIN_VAR_TRUE },
+    { "undefined", BUILTIN_VAR_UNDEFINED },
+    { "view_angle", BUILTIN_VAR_VIEW_ANGLE },
+    { "view_current", BUILTIN_VAR_VIEW_CURRENT },
+    { "view_hborder", BUILTIN_VAR_VIEW_HBORDER },
+    { "view_hport", BUILTIN_VAR_VIEW_HPORT },
+    { "view_hspeed", BUILTIN_VAR_VIEW_HSPEED },
+    { "view_hview", BUILTIN_VAR_VIEW_HVIEW },
+    { "view_object", BUILTIN_VAR_VIEW_OBJECT },
+    { "view_vborder", BUILTIN_VAR_VIEW_VBORDER },
+    { "view_visible", BUILTIN_VAR_VIEW_VISIBLE },
+    { "view_vspeed", BUILTIN_VAR_VIEW_VSPEED },
+    { "view_wport", BUILTIN_VAR_VIEW_WPORT },
+    { "view_wview", BUILTIN_VAR_VIEW_WVIEW },
+    { "view_xport", BUILTIN_VAR_VIEW_XPORT },
+    { "view_xview", BUILTIN_VAR_VIEW_XVIEW },
+    { "view_yport", BUILTIN_VAR_VIEW_YPORT },
+    { "view_yview", BUILTIN_VAR_VIEW_YVIEW },
+    { "visible", BUILTIN_VAR_VISIBLE },
+    { "vspeed", BUILTIN_VAR_VSPEED },
+    { "working_directory", BUILTIN_VAR_WORKING_DIRECTORY },
+    { "x", BUILTIN_VAR_X },
+    { "xprevious", BUILTIN_VAR_XPREVIOUS },
+    { "xstart", BUILTIN_VAR_XSTART },
+    { "y", BUILTIN_VAR_Y },
+    { "yprevious", BUILTIN_VAR_YPREVIOUS },
+    { "ystart", BUILTIN_VAR_YSTART },
+};
+
+static int compareBuiltinVarEntry(const void* keyPtr, const void* entryPtr) {
+    const char* key = (const char*) keyPtr;
+    const BuiltinVarEntry* entry = (const BuiltinVarEntry*) entryPtr;
+    return strcmp(key, entry->name);
+}
+
 // Resolves a built-in variable name to its enum ID
 int16_t VMBuiltins_resolveBuiltinVarId(const char* name) {
-    // Instance properties
-    if (strcmp(name, "x") == 0) return BUILTIN_VAR_X;
-    if (strcmp(name, "y") == 0) return BUILTIN_VAR_Y;
-    if (strcmp(name, "xprevious") == 0) return BUILTIN_VAR_XPREVIOUS;
-    if (strcmp(name, "yprevious") == 0) return BUILTIN_VAR_YPREVIOUS;
-    if (strcmp(name, "xstart") == 0) return BUILTIN_VAR_XSTART;
-    if (strcmp(name, "ystart") == 0) return BUILTIN_VAR_YSTART;
-    if (strcmp(name, "image_speed") == 0) return BUILTIN_VAR_IMAGE_SPEED;
-    if (strcmp(name, "image_index") == 0) return BUILTIN_VAR_IMAGE_INDEX;
-    if (strcmp(name, "image_xscale") == 0) return BUILTIN_VAR_IMAGE_XSCALE;
-    if (strcmp(name, "image_yscale") == 0) return BUILTIN_VAR_IMAGE_YSCALE;
-    if (strcmp(name, "image_angle") == 0) return BUILTIN_VAR_IMAGE_ANGLE;
-    if (strcmp(name, "image_alpha") == 0) return BUILTIN_VAR_IMAGE_ALPHA;
-    if (strcmp(name, "image_blend") == 0) return BUILTIN_VAR_IMAGE_BLEND;
-    if (strcmp(name, "image_number") == 0) return BUILTIN_VAR_IMAGE_NUMBER;
-    if (strcmp(name, "sprite_index") == 0) return BUILTIN_VAR_SPRITE_INDEX;
-    if (strcmp(name, "sprite_width") == 0) return BUILTIN_VAR_SPRITE_WIDTH;
-    if (strcmp(name, "sprite_height") == 0) return BUILTIN_VAR_SPRITE_HEIGHT;
-    if (strcmp(name, "sprite_xoffset") == 0) return BUILTIN_VAR_SPRITE_XOFFSET;
-    if (strcmp(name, "sprite_yoffset") == 0) return BUILTIN_VAR_SPRITE_YOFFSET;
-    if (strcmp(name, "bbox_left") == 0) return BUILTIN_VAR_BBOX_LEFT;
-    if (strcmp(name, "bbox_right") == 0) return BUILTIN_VAR_BBOX_RIGHT;
-    if (strcmp(name, "bbox_top") == 0) return BUILTIN_VAR_BBOX_TOP;
-    if (strcmp(name, "bbox_bottom") == 0) return BUILTIN_VAR_BBOX_BOTTOM;
-    if (strcmp(name, "visible") == 0) return BUILTIN_VAR_VISIBLE;
-    if (strcmp(name, "depth") == 0) return BUILTIN_VAR_DEPTH;
-    if (strcmp(name, "persistent") == 0) return BUILTIN_VAR_PERSISTENT;
-    if (strcmp(name, "solid") == 0) return BUILTIN_VAR_SOLID;
-    if (strcmp(name, "mask_index") == 0) return BUILTIN_VAR_MASK_INDEX;
-    if (strcmp(name, "id") == 0) return BUILTIN_VAR_ID;
-    if (strcmp(name, "object_index") == 0) return BUILTIN_VAR_OBJECT_INDEX;
-    if (strcmp(name, "speed") == 0) return BUILTIN_VAR_SPEED;
-    if (strcmp(name, "direction") == 0) return BUILTIN_VAR_DIRECTION;
-    if (strcmp(name, "hspeed") == 0) return BUILTIN_VAR_HSPEED;
-    if (strcmp(name, "vspeed") == 0) return BUILTIN_VAR_VSPEED;
-    if (strcmp(name, "friction") == 0) return BUILTIN_VAR_FRICTION;
-    if (strcmp(name, "gravity") == 0) return BUILTIN_VAR_GRAVITY;
-    if (strcmp(name, "gravity_direction") == 0) return BUILTIN_VAR_GRAVITY_DIRECTION;
-    if (strcmp(name, "alarm") == 0) return BUILTIN_VAR_ALARM;
+    size_t count = sizeof(BUILTIN_VAR_TABLE) / sizeof(BUILTIN_VAR_TABLE[0]);
+    BuiltinVarEntry* hit = (BuiltinVarEntry*) bsearch(name, BUILTIN_VAR_TABLE, count, sizeof(BuiltinVarEntry), compareBuiltinVarEntry);
+    return hit == nullptr ? BUILTIN_VAR_UNKNOWN : hit->id;
+}
 
-    // Path instance variables
-    if (strcmp(name, "path_index") == 0) return BUILTIN_VAR_PATH_INDEX;
-    if (strcmp(name, "path_position") == 0) return BUILTIN_VAR_PATH_POSITION;
-    if (strcmp(name, "path_positionprevious") == 0) return BUILTIN_VAR_PATH_POSITIONPREVIOUS;
-    if (strcmp(name, "path_speed") == 0) return BUILTIN_VAR_PATH_SPEED;
-    if (strcmp(name, "path_scale") == 0) return BUILTIN_VAR_PATH_SCALE;
-    if (strcmp(name, "path_orientation") == 0) return BUILTIN_VAR_PATH_ORIENTATION;
-    if (strcmp(name, "path_endaction") == 0) return BUILTIN_VAR_PATH_ENDACTION;
-
-    // Room properties
-    if (strcmp(name, "room") == 0) return BUILTIN_VAR_ROOM;
-    if (strcmp(name, "room_first") == 0) return BUILTIN_VAR_ROOM_FIRST;
-    if (strcmp(name, "room_speed") == 0) return BUILTIN_VAR_ROOM_SPEED;
-    if (strcmp(name, "room_width") == 0) return BUILTIN_VAR_ROOM_WIDTH;
-    if (strcmp(name, "room_height") == 0) return BUILTIN_VAR_ROOM_HEIGHT;
-    if (strcmp(name, "room_persistent") == 0) return BUILTIN_VAR_ROOM_PERSISTENT;
-
-    // View properties
-    if (strcmp(name, "view_current") == 0) return BUILTIN_VAR_VIEW_CURRENT;
-    if (strcmp(name, "view_xview") == 0) return BUILTIN_VAR_VIEW_XVIEW;
-    if (strcmp(name, "view_yview") == 0) return BUILTIN_VAR_VIEW_YVIEW;
-    if (strcmp(name, "view_wview") == 0) return BUILTIN_VAR_VIEW_WVIEW;
-    if (strcmp(name, "view_hview") == 0) return BUILTIN_VAR_VIEW_HVIEW;
-    if (strcmp(name, "view_xport") == 0) return BUILTIN_VAR_VIEW_XPORT;
-    if (strcmp(name, "view_yport") == 0) return BUILTIN_VAR_VIEW_YPORT;
-    if (strcmp(name, "view_wport") == 0) return BUILTIN_VAR_VIEW_WPORT;
-    if (strcmp(name, "view_hport") == 0) return BUILTIN_VAR_VIEW_HPORT;
-    if (strcmp(name, "view_visible") == 0) return BUILTIN_VAR_VIEW_VISIBLE;
-    if (strcmp(name, "view_angle") == 0) return BUILTIN_VAR_VIEW_ANGLE;
-    if (strcmp(name, "view_hborder") == 0) return BUILTIN_VAR_VIEW_HBORDER;
-    if (strcmp(name, "view_vborder") == 0) return BUILTIN_VAR_VIEW_VBORDER;
-    if (strcmp(name, "view_object") == 0) return BUILTIN_VAR_VIEW_OBJECT;
-    if (strcmp(name, "view_hspeed") == 0) return BUILTIN_VAR_VIEW_HSPEED;
-    if (strcmp(name, "view_vspeed") == 0) return BUILTIN_VAR_VIEW_VSPEED;
-
-    // Background properties
-    if (strcmp(name, "background_visible") == 0) return BUILTIN_VAR_BACKGROUND_VISIBLE;
-    if (strcmp(name, "background_index") == 0) return BUILTIN_VAR_BACKGROUND_INDEX;
-    if (strcmp(name, "background_x") == 0) return BUILTIN_VAR_BACKGROUND_X;
-    if (strcmp(name, "background_y") == 0) return BUILTIN_VAR_BACKGROUND_Y;
-    if (strcmp(name, "background_hspeed") == 0) return BUILTIN_VAR_BACKGROUND_HSPEED;
-    if (strcmp(name, "background_vspeed") == 0) return BUILTIN_VAR_BACKGROUND_VSPEED;
-    if (strcmp(name, "background_width") == 0) return BUILTIN_VAR_BACKGROUND_WIDTH;
-    if (strcmp(name, "background_height") == 0) return BUILTIN_VAR_BACKGROUND_HEIGHT;
-    if (strcmp(name, "background_alpha") == 0) return BUILTIN_VAR_BACKGROUND_ALPHA;
-    if (strcmp(name, "background_color") == 0) return BUILTIN_VAR_BACKGROUND_COLOR;
-    if (strcmp(name, "background_colour") == 0) return BUILTIN_VAR_BACKGROUND_COLOUR;
-
-    // OS constants
-    if (strcmp(name, "os_type") == 0) return BUILTIN_VAR_OS_TYPE;
-    if (strcmp(name, "os_unknown") == 0) return BUILTIN_VAR_OS_UNKNOWN;
-    if (strcmp(name, "os_win32") == 0) return BUILTIN_VAR_OS_WIN32;
-    if (strcmp(name, "os_windows") == 0) return BUILTIN_VAR_OS_WINDOWS;
-    if (strcmp(name, "os_macosx") == 0) return BUILTIN_VAR_OS_MACOSX;
-    if (strcmp(name, "os_psp") == 0) return BUILTIN_VAR_OS_PSP;
-    if (strcmp(name, "os_ios") == 0) return BUILTIN_VAR_OS_IOS;
-    if (strcmp(name, "os_android") == 0) return BUILTIN_VAR_OS_ANDROID;
-    if (strcmp(name, "os_symbian") == 0) return BUILTIN_VAR_OS_SYMBIAN;
-    if (strcmp(name, "os_linux") == 0) return BUILTIN_VAR_OS_LINUX;
-    if (strcmp(name, "os_winphone") == 0) return BUILTIN_VAR_OS_WINPHONE;
-    if (strcmp(name, "os_tizen") == 0) return BUILTIN_VAR_OS_TIZEN;
-    if (strcmp(name, "os_win8native") == 0) return BUILTIN_VAR_OS_WIN8NATIVE;
-    if (strcmp(name, "os_wiiu") == 0) return BUILTIN_VAR_OS_WIIU;
-    if (strcmp(name, "os_3ds") == 0) return BUILTIN_VAR_OS_3DS;
-    if (strcmp(name, "os_psvita") == 0) return BUILTIN_VAR_OS_PSVITA;
-    if (strcmp(name, "os_bb10") == 0) return BUILTIN_VAR_OS_BB10;
-    if (strcmp(name, "os_ps4") == 0) return BUILTIN_VAR_OS_PS4;
-    if (strcmp(name, "os_xboxone") == 0) return BUILTIN_VAR_OS_XBOXONE;
-    if (strcmp(name, "os_ps3") == 0) return BUILTIN_VAR_OS_PS3;
-    if (strcmp(name, "os_xbox360") == 0) return BUILTIN_VAR_OS_XBOX360;
-    if (strcmp(name, "os_uwp") == 0) return BUILTIN_VAR_OS_UWP;
-    if (strcmp(name, "os_amazon") == 0) return BUILTIN_VAR_OS_AMAZON;
-    if (strcmp(name, "os_switch") == 0) return BUILTIN_VAR_OS_SWITCH;
-    if (strcmp(name, "os_llvm_win32") == 0) return BUILTIN_VAR_OS_LLVM_WIN32;
-    if (strcmp(name, "os_llvm_macosx") == 0) return BUILTIN_VAR_OS_LLVM_MACOSX;
-    if (strcmp(name, "os_llvm_psp") == 0) return BUILTIN_VAR_OS_LLVM_PSP;
-    if (strcmp(name, "os_llvm_ios") == 0) return BUILTIN_VAR_OS_LLVM_IOS;
-    if (strcmp(name, "os_llvm_android") == 0) return BUILTIN_VAR_OS_LLVM_ANDROID;
-    if (strcmp(name, "os_llvm_symbian") == 0) return BUILTIN_VAR_OS_LLVM_SYMBIAN;
-    if (strcmp(name, "os_llvm_linux") == 0) return BUILTIN_VAR_OS_LLVM_LINUX;
-    if (strcmp(name, "os_llvm_winphone") == 0) return BUILTIN_VAR_OS_LLVM_WINPHONE;
-
-    // Timing
-    if (strcmp(name, "current_time") == 0) return BUILTIN_VAR_CURRENT_TIME;
-
-    // File system
-    if (strcmp(name, "working_directory") == 0) return BUILTIN_VAR_WORKING_DIRECTORY;
-
-    // Arguments
-    if (strcmp(name, "argument_count") == 0) return BUILTIN_VAR_ARGUMENT_COUNT;
-    if (strcmp(name, "argument") == 0) return BUILTIN_VAR_ARGUMENT;
-    if (strcmp(name, "argument0") == 0) return BUILTIN_VAR_ARGUMENT0;
-    if (strcmp(name, "argument1") == 0) return BUILTIN_VAR_ARGUMENT1;
-    if (strcmp(name, "argument2") == 0) return BUILTIN_VAR_ARGUMENT2;
-    if (strcmp(name, "argument3") == 0) return BUILTIN_VAR_ARGUMENT3;
-    if (strcmp(name, "argument4") == 0) return BUILTIN_VAR_ARGUMENT4;
-    if (strcmp(name, "argument5") == 0) return BUILTIN_VAR_ARGUMENT5;
-    if (strcmp(name, "argument6") == 0) return BUILTIN_VAR_ARGUMENT6;
-    if (strcmp(name, "argument7") == 0) return BUILTIN_VAR_ARGUMENT7;
-    if (strcmp(name, "argument8") == 0) return BUILTIN_VAR_ARGUMENT8;
-    if (strcmp(name, "argument9") == 0) return BUILTIN_VAR_ARGUMENT9;
-    if (strcmp(name, "argument10") == 0) return BUILTIN_VAR_ARGUMENT10;
-    if (strcmp(name, "argument11") == 0) return BUILTIN_VAR_ARGUMENT11;
-    if (strcmp(name, "argument12") == 0) return BUILTIN_VAR_ARGUMENT12;
-    if (strcmp(name, "argument13") == 0) return BUILTIN_VAR_ARGUMENT13;
-    if (strcmp(name, "argument14") == 0) return BUILTIN_VAR_ARGUMENT14;
-    if (strcmp(name, "argument15") == 0) return BUILTIN_VAR_ARGUMENT15;
-
-    // Keyboard
-    if (strcmp(name, "keyboard_key") == 0) return BUILTIN_VAR_KEYBOARD_KEY;
-    if (strcmp(name, "keyboard_lastchar") == 0) return BUILTIN_VAR_KEYBOARD_LASTCHAR;
-    if (strcmp(name, "keyboard_lastkey") == 0) return BUILTIN_VAR_KEYBOARD_LASTKEY;
-
-    // Surfaces
-    if (strcmp(name, "application_surface") == 0) return BUILTIN_VAR_APPLICATION_SURFACE;
-
-    // Constants
-    if (strcmp(name, "true") == 0) return BUILTIN_VAR_TRUE;
-    if (strcmp(name, "false") == 0) return BUILTIN_VAR_FALSE;
-    if (strcmp(name, "pi") == 0) return BUILTIN_VAR_PI;
-    if (strcmp(name, "undefined") == 0) return BUILTIN_VAR_UNDEFINED;
-
-    // Path action constants
-    if (strcmp(name, "path_action_stop") == 0) return BUILTIN_VAR_PATH_ACTION_STOP;
-    if (strcmp(name, "path_action_restart") == 0) return BUILTIN_VAR_PATH_ACTION_RESTART;
-    if (strcmp(name, "path_action_continue") == 0) return BUILTIN_VAR_PATH_ACTION_CONTINUE;
-    if (strcmp(name, "path_action_reverse") == 0) return BUILTIN_VAR_PATH_ACTION_REVERSE;
-
-    // Buffer type constants
-    if (strcmp(name, "buffer_fixed") == 0) return BUILTIN_VAR_BUFFER_FIXED;
-    if (strcmp(name, "buffer_grow") == 0) return BUILTIN_VAR_BUFFER_GROW;
-    if (strcmp(name, "buffer_wrap") == 0) return BUILTIN_VAR_BUFFER_WRAP;
-    if (strcmp(name, "buffer_fast") == 0) return BUILTIN_VAR_BUFFER_FAST;
-
-    // Buffer data type constants
-    if (strcmp(name, "buffer_u8") == 0) return BUILTIN_VAR_BUFFER_U8;
-    if (strcmp(name, "buffer_s8") == 0) return BUILTIN_VAR_BUFFER_S8;
-    if (strcmp(name, "buffer_u16") == 0) return BUILTIN_VAR_BUFFER_U16;
-    if (strcmp(name, "buffer_s16") == 0) return BUILTIN_VAR_BUFFER_S16;
-    if (strcmp(name, "buffer_u32") == 0) return BUILTIN_VAR_BUFFER_U32;
-    if (strcmp(name, "buffer_s32") == 0) return BUILTIN_VAR_BUFFER_S32;
-    if (strcmp(name, "buffer_f16") == 0) return BUILTIN_VAR_BUFFER_F16;
-    if (strcmp(name, "buffer_f32") == 0) return BUILTIN_VAR_BUFFER_F32;
-    if (strcmp(name, "buffer_f64") == 0) return BUILTIN_VAR_BUFFER_F64;
-    if (strcmp(name, "buffer_bool") == 0) return BUILTIN_VAR_BUFFER_BOOL;
-    if (strcmp(name, "buffer_string") == 0) return BUILTIN_VAR_BUFFER_STRING;
-    if (strcmp(name, "buffer_u64") == 0) return BUILTIN_VAR_BUFFER_U64;
-    if (strcmp(name, "buffer_text") == 0) return BUILTIN_VAR_BUFFER_TEXT;
-
-    // Buffer seek mode constants
-    if (strcmp(name, "buffer_seek_start") == 0) return BUILTIN_VAR_BUFFER_SEEK_START;
-    if (strcmp(name, "buffer_seek_relative") == 0) return BUILTIN_VAR_BUFFER_SEEK_RELATIVE;
-    if (strcmp(name, "buffer_seek_end") == 0) return BUILTIN_VAR_BUFFER_SEEK_END;
-
-    // Other
-    if (strcmp(name, "fps") == 0) return BUILTIN_VAR_FPS;
-    if (strcmp(name, "debug_mode") == 0) return BUILTIN_VAR_DEBUG_MODE;
-
-    return BUILTIN_VAR_UNKNOWN;
+void VMBuiltins_checkIfBuiltinVarTableIsSorted(void) {
+    size_t count = sizeof(BUILTIN_VAR_TABLE) / sizeof(BUILTIN_VAR_TABLE[0]);
+    for (size_t i = 1; count > i; i++) {
+        int cmp = strcmp(BUILTIN_VAR_TABLE[i - 1].name, BUILTIN_VAR_TABLE[i].name);
+        requireMessageFormatted(cmp < 0, "BUILTIN_VAR_TABLE not strictly sorted at index %zu: '%s' vs '%s' (cmp=%d). Re-sort (LC_ALL=C) or remove duplicates!", i, BUILTIN_VAR_TABLE[i - 1].name, BUILTIN_VAR_TABLE[i].name, cmp);
+    }
 }
 
 RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* name, int32_t arrayIndex) {
