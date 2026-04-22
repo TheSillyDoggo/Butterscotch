@@ -46,8 +46,17 @@ target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(butterscotch PUBLIC vendor/stb/ds)
 
 if(PLATFORM STREQUAL "glfw")
-    # Enable Butterscotch VM/interpreter profiler
-    add_compile_definitions(ENABLE_VM_PROFILER)
+    # Butterscotch VM/interpreter profiler
+    option(ENABLE_VM_PROFILER "Enable Butterscotch VM/interpreter profiler" ON)
+    if(ENABLE_VM_PROFILER)
+        add_compile_definitions(ENABLE_VM_PROFILER)
+    endif()
+
+    # Butterscotch VM/interpreter tracing
+    option(ENABLE_VM_TRACING "Enable Butterscotch VM/interpreter tracing checks" ON)
+    if(ENABLE_VM_TRACING)
+        add_compile_definitions(ENABLE_VM_TRACING)
+    endif()
 
     # GLAD
     add_library(glad STATIC vendor/glad/src/glad.c)
@@ -101,14 +110,27 @@ elseif(PLATFORM STREQUAL "ps2")
     add_compile_definitions(USE_FLOAT_REALS)
     # By disabling Int64 support, we can fit the entire RValue struct in 8 bytes, improving performance and memory usage
     add_compile_definitions(NO_RVALUE_INT64)
-    # Disable Butterscotch VM/interpreter tracing checks
-    add_compile_definitions(DISABLE_VM_TRACING)
+
+    # Butterscotch VM/interpreter profiler
+    option(ENABLE_VM_PROFILER "Enable Butterscotch VM/interpreter profiler" OFF)
+    if(ENABLE_VM_PROFILER)
+        add_compile_definitions(ENABLE_VM_PROFILER)
+    endif()
+
+    # Butterscotch VM/interpreter tracing
+    option(ENABLE_VM_TRACING "Enable Butterscotch VM/interpreter tracing checks" OFF)
+    if(ENABLE_VM_TRACING)
+        add_compile_definitions(ENABLE_VM_TRACING)
+    endif()
+
     # Platform identifier for PS2-specific code paths (e.g., scratchpad allocation)
     add_compile_definitions(PLATFORM_PS2)
-    # Disable the PS2 audio system
-    option(DISABLE_PS2_AUDIO "Disable the PS2 audio system" OFF)
-    if(DISABLE_PS2_AUDIO)
-        add_compile_definitions(DISABLE_PS2_AUDIO)
+    
+    # PS2 audio system
+    option(ENABLE_PS2_AUDIO "Enable the PS2 audio system" ON)
+    if(ENABLE_PS2_AUDIO)
+        add_compile_definitions(ENABLE_PS2_AUDIO)
+    else()
         list(REMOVE_ITEM PLATFORM_SOURCES ${CMAKE_SOURCE_DIR}/src/ps2/ps2_audio_system.c)
     endif()
     # Treat unsuffixed float constants as single-precision to avoid accidental
@@ -164,7 +186,7 @@ elseif(PLATFORM STREQUAL "ps2")
             DEPENDS ${IRX_DIR}/ps2kbd.irx
             COMMENT "Embedding ps2kbd.irx"
         )
-        if(NOT DISABLE_PS2_AUDIO)
+        if(ENABLE_PS2_AUDIO)
             add_custom_command(
                 OUTPUT ${IRX_GEN_DIR}/freesd_irx.c
                 COMMAND $ENV{PS2SDK}/bin/bin2c ${IRX_DIR}/freesd.irx ${IRX_GEN_DIR}/freesd_irx.c freesd_irx
@@ -180,7 +202,7 @@ elseif(PLATFORM STREQUAL "ps2")
         endif()
 
         target_sources(butterscotch PRIVATE ${IRX_GEN_DIR}/sio2man_irx.c ${IRX_GEN_DIR}/mcman_irx.c ${IRX_GEN_DIR}/mcserv_irx.c ${IRX_GEN_DIR}/padman_irx.c ${IRX_GEN_DIR}/usbd_irx.c ${IRX_GEN_DIR}/ps2kbd_irx.c)
-        if(NOT DISABLE_PS2_AUDIO)
+        if(ENABLE_PS2_AUDIO)
             target_sources(butterscotch PRIVATE ${IRX_GEN_DIR}/freesd_irx.c ${IRX_GEN_DIR}/audsrv_irx.c)
         endif()
         target_include_directories(butterscotch PRIVATE ${IRX_GEN_DIR})

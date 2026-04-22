@@ -232,7 +232,7 @@ typedef struct VMContext {
     struct { int32_t key; int32_t* value; }* crossRefMap;
     bool alwaysLogUnknownFunctions;
     bool alwaysLogStubbedFunctions;
-#ifndef DISABLE_VM_TRACING
+#ifdef ENABLE_VM_TRACING
     StringBooleanEntry* varReadsToBeTraced;
     StringBooleanEntry* varWritesToBeTraced;
     StringBooleanEntry* functionCallsToBeTraced;
