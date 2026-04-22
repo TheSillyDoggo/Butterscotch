@@ -788,8 +788,22 @@ static Instance** takePersistentInstances(Runner* runner) {
     repeat(oldCount, i) {
         Instance* inst = runner->instances[i];
         if (inst->persistent) {
+#ifdef ENABLE_VM_TRACING
+            GameObject* gameObject = &runner->dataWin->objt.objects[inst->objectIndex];
+            if (shgeti(runner->vmContext->instanceLifecyclesToBeTraced, "*") != -1 || shgeti(runner->vmContext->instanceLifecyclesToBeTraced, gameObject->name) != -1) {
+                fprintf(stderr, "VM: Instance %s (%d) has been persisted at (%f, %f) due to room change\n", gameObject->name, inst->instanceId, inst->x, inst->y);
+            }
+#endif
+
             arrput(carriedPersistent, inst);
         } else {
+#ifdef ENABLE_VM_TRACING
+            GameObject* gameObject = &runner->dataWin->objt.objects[inst->objectIndex];
+            if (shgeti(runner->vmContext->instanceLifecyclesToBeTraced, "*") != -1 || shgeti(runner->vmContext->instanceLifecyclesToBeTraced, gameObject->name) != -1) {
+                fprintf(stderr, "VM: Instance %s (%d) destroyed at (%f, %f) due to room change\n", gameObject->name, inst->instanceId, inst->x, inst->y);
+            }
+#endif
+
             hmdel(runner->instancesToId, inst->instanceId);
             Instance_free(inst);
         }
