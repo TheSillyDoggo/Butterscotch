@@ -54,10 +54,11 @@ extern unsigned char audsrv_irx[];
 extern unsigned int size_audsrv_irx;
 #endif
 
-// The maximum memory of a normal PS2 console
-// Developer consoles may have more memory, but because ps2sdk does not have a way to know
-// how much memory the console really has, we will use this value instead
-static int MAX_MEMORY_BYTES = 33554432;
+// Total main RAM in bytes.
+static int MAX_MEMORY_BYTES = 0;
+
+// Heap ceiling: Captured once at startup (before any game allocations) and used as a stable denominator in the debug overlay.
+static int heapCeilingBytes = 0;
 
 // 256-byte aligned buffers for libpad (one per port)
 static char padBuf[2][256] __attribute__((aligned(64)));
@@ -408,6 +409,15 @@ static void loadingScreenCallback(const char* chunkName, int chunkIndex, int tot
 int main(int argc, char* argv[]) {
     SifInitRpc(0);
     sbv_patch_enable_lmb();
+
+    // Ask the kernel how much main RAM we actually have.
+    MAX_MEMORY_BYTES = (int) GetMemorySize();
+
+    // Snapshot the heap ceiling BEFORE anything else allocates. sbrk(0) at this point is the heap frontier after newlib's baseline reservations; mallinfo.uordblks is what newlib has already handed out to startup code. Their sum (added to the sbrk runway) is the total bytes user code could ever cumulatively hold live.
+    {
+        struct mallinfo mi = mallinfo();
+        heapCeilingBytes = (MAX_MEMORY_BYTES - (int) (uintptr_t) sbrk(0)) + mi.uordblks;
+    }
 
     PS2Utils_extractDeviceKey(argv[0]);
 
@@ -892,11 +902,7 @@ int main(int argc, char* argv[]) {
         // ===[ Debug Overlay ]===
         if (debugOverlayState == 0 || debugOverlayState == 1) {
             u64 debugColor = GS_SETREG_RGBAQ(0xFF, 0xFF, 0xFF, 0x80, 0x00);
-            // sbrk(0) returns the actual heap frontier; true free = top of RAM - sbrk frontier
-            void* heapTop = sbrk(0);
-            int32_t freeBytes = MAX_MEMORY_BYTES - (int32_t) (uintptr_t) heapTop;
-
-            char debugText[256];
+            char debugText[512];
             uint32_t vramFreeBytes = GS_VRAM_SIZE - gsGlobal->CurrentPointer;
 
             // Count atlases loaded in VRAM and EE RAM cache
@@ -908,7 +914,11 @@ int main(int argc, char* argv[]) {
                 if (gsRenderer->eeCacheEntries[ai].atlasId >= 0) eeramAtlasCount++;
             }
 
-            snprintf(debugText, sizeof(debugText), "Tick: %.2fms\nStep: %.2fms\nDraw: %.2fms\nAudio: %.2fms\nFree: %d bytes\nVRAM Free: %lu bytes\nRoom Speed: %u%s\nAtlas: (%u, %u, %u)%s", (double) tickTime, (double) stepTime, (double) drawTime, (double) audioTime, freeBytes, (unsigned long) vramFreeBytes, roomSpeed, speedCapRemoved ? " [UNCAPPED]" : "", vramAtlasCount, eeramAtlasCount, gsRenderer->atlasCount, gsRenderer->evictedAtlasUsedInCurrentFrame ? " [THRASHING]" : "");
+            int freeBytes = heapCeilingBytes - mallinfo().uordblks;
+
+            const char* roomName = runner->currentRoom != nullptr && runner->currentRoom->name != nullptr ? runner->currentRoom->name : "?";
+
+            snprintf(debugText, sizeof(debugText), "Room: %s\nTick: %.2fms\nStep: %.2fms\nDraw: %.2fms\nAudio: %.2fms\nFree: %d bytes\nVRAM Free: %lu bytes\nRoom Speed: %u%s\nAtlas: (%u, %u, %u)%s\nInstances: %d", roomName, (double) tickTime, (double) stepTime, (double) drawTime, (double) audioTime, freeBytes, (unsigned long) vramFreeBytes, roomSpeed, speedCapRemoved ? " [UNCAPPED]" : "", vramAtlasCount, eeramAtlasCount, gsRenderer->atlasCount, gsRenderer->evictedAtlasUsedInCurrentFrame ? " [THRASHING]" : "", (int) arrlen(runner->instances));
             gsKit_fontm_print_scaled(gsGlobal, gsFontM, 10.0f, 10.0f, 10, 0.6f, debugColor, debugText);
 
             if (debugOverlayState == 1) {
@@ -922,7 +932,7 @@ int main(int argc, char* argv[]) {
                     Profiler_reset(vm->profiler);
                     profilerFramesInWindow = 0;
                 }
-                float profilerY = 10.0f + (15.6f * 8.0f) + 6.0f;
+                float profilerY = 10.0f + (15.6f * 10.0f) + 6.0f;
 #ifdef ENABLE_VM_PROFILER
                 const char* profilerDisplay = profilerOverlayText[0] != '\0' ? profilerOverlayText : "GML Profiler (collecting...)";
 #else
