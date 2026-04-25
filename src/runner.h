@@ -8,6 +8,7 @@
 #include "instance.h"
 #include "renderer.h"
 #include "runner_keyboard.h"
+#include "spatial_grid.h"
 #include "vm.h"
 
 // ===[ Event Type Constants ]===
@@ -290,6 +291,7 @@ typedef struct Runner {
     // Any loop that might fire user code iterates a copy so that in-flight mutations (instance_change swap-remove, spawns, destroys) don't corrupt it.
     // Each call pushes its snapshot (append) and pops on normal loop exit; nesting is safe because pushes/pops are LIFO and outer ranges stay untouched under newer pushes.
     Instance** instanceSnapshots;
+    SpatialGrid* spatialGrid;
     int32_t pendingRoom;  // -1 = none
     bool gameStartFired;
     int frameCount;
