@@ -180,17 +180,17 @@ elseif(PLATFORM STREQUAL "ps2")
         target_link_directories(butterscotch PRIVATE $ENV{PS2SDK}/ee/lib $ENV{GSKIT}/lib)
         target_link_libraries(butterscotch gskit dmakit audsrv pad mc kbd patches kernel c m)
 
-        # Embed ps2sdk IRX modules (sio2man, padman) as C arrays via bin2c
+        # Embed ps2sdk IRX modules (freesio2, freepad) as C arrays via bin2c
         # This avoids loading from rom0: which has compatibility issues between fat/slim PS2
         set(IRX_DIR $ENV{PS2SDK}/iop/irx)
         set(IRX_GEN_DIR ${CMAKE_BINARY_DIR}/generated/irx)
         file(MAKE_DIRECTORY ${IRX_GEN_DIR})
 
         add_custom_command(
-            OUTPUT ${IRX_GEN_DIR}/sio2man_irx.c
-            COMMAND $ENV{PS2SDK}/bin/bin2c ${IRX_DIR}/sio2man.irx ${IRX_GEN_DIR}/sio2man_irx.c sio2man_irx
-            DEPENDS ${IRX_DIR}/sio2man.irx
-            COMMENT "Embedding sio2man.irx"
+            OUTPUT ${IRX_GEN_DIR}/freesio2_irx.c
+            COMMAND $ENV{PS2SDK}/bin/bin2c ${IRX_DIR}/freesio2.irx ${IRX_GEN_DIR}/freesio2_irx.c freesio2_irx
+            DEPENDS ${IRX_DIR}/freesio2.irx
+            COMMENT "Embedding freesio2.irx"
         )
         add_custom_command(
             OUTPUT ${IRX_GEN_DIR}/mcman_irx.c
@@ -205,10 +205,10 @@ elseif(PLATFORM STREQUAL "ps2")
             COMMENT "Embedding mcserv.irx"
         )
         add_custom_command(
-            OUTPUT ${IRX_GEN_DIR}/padman_irx.c
-            COMMAND $ENV{PS2SDK}/bin/bin2c ${IRX_DIR}/padman.irx ${IRX_GEN_DIR}/padman_irx.c padman_irx
-            DEPENDS ${IRX_DIR}/padman.irx
-            COMMENT "Embedding padman.irx"
+            OUTPUT ${IRX_GEN_DIR}/freepad_irx.c
+            COMMAND $ENV{PS2SDK}/bin/bin2c ${IRX_DIR}/freepad.irx ${IRX_GEN_DIR}/freepad_irx.c freepad_irx
+            DEPENDS ${IRX_DIR}/freepad.irx
+            COMMENT "Embedding freepad.irx"
         )
         # We need the USB mass storage IRX modules for writing gmon.out when not running from host: and for keyboard support
         add_custom_command(
@@ -238,7 +238,7 @@ elseif(PLATFORM STREQUAL "ps2")
             )
         endif()
 
-        target_sources(butterscotch PRIVATE ${IRX_GEN_DIR}/sio2man_irx.c ${IRX_GEN_DIR}/mcman_irx.c ${IRX_GEN_DIR}/mcserv_irx.c ${IRX_GEN_DIR}/padman_irx.c ${IRX_GEN_DIR}/usbd_irx.c ${IRX_GEN_DIR}/ps2kbd_irx.c)
+        target_sources(butterscotch PRIVATE ${IRX_GEN_DIR}/freesio2_irx.c ${IRX_GEN_DIR}/mcman_irx.c ${IRX_GEN_DIR}/mcserv_irx.c ${IRX_GEN_DIR}/freepad_irx.c ${IRX_GEN_DIR}/usbd_irx.c ${IRX_GEN_DIR}/ps2kbd_irx.c)
         if(ENABLE_PS2_AUDIO)
             target_sources(butterscotch PRIVATE ${IRX_GEN_DIR}/freesd_irx.c ${IRX_GEN_DIR}/audsrv_irx.c)
         endif()
