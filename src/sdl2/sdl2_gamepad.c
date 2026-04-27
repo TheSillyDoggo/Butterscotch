@@ -87,46 +87,56 @@ void Sdl2Gamepad_loadMappings(const char* mappings) {
 }
 
 void Sdl2Gamepad_poll(RunnerGamepadState* gp) {
-    gp->connectedCount = 0;
+    /*for (int slotIdx = 0; slotIdx < 1 && slotIdx < MAX_GAMEPADS; slotIdx++) {
+        GamepadSlot* slot = &gp->slots[slotIdx];
 
-    for (int i = 0; i < MAX_GAMEPADS; i++) {
-        GamepadSlot* slot = &gp->slots[i];
+        bool currentlyConnected = false;
+        int  foundJid = -1;
 
-        if (!slot->connected || slot->controller == NULL) {
-            int id = findFirstController();
-            if (id < 0) {
+        for (int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_16; jid++) {
+            if (glfwJoystickPresent(jid) && glfwJoystickIsGamepad(jid)) {
+                foundJid = jid;
+                currentlyConnected = true;
+                break;
+            }
+        }
+
+        if (currentlyConnected) {
+            GLFWgamepadstate state;
+            if (glfwGetGamepadState(foundJid, &state)) {
+                mapGlfwToGml(&state, slot);
+                slot->jid = foundJid;
+                slot->connected = true;
+
+                const char* name = glfwGetJoystickName(foundJid);
+                if (name != NULL) {
+                    strncpy(slot->description, name, sizeof(slot->description) - 1);
+                    slot->description[sizeof(slot->description) - 1] = '\0';
+                }
+
+                const char* guid = glfwGetJoystickGUID(foundJid);
+                if (guid != NULL) {
+                    strncpy(slot->guid, guid, sizeof(slot->guid) - 1);
+                    slot->guid[sizeof(slot->guid) - 1] = '\0';
+                } else {
+                    slot->guid[0] = '\0';
+                }
+            } else {
                 slot->connected = false;
-                continue;
+                slot->guid[0] = '\0';
             }
-
-            slot->controller = SDL_GameControllerOpen(id);
-            slot->connected = (slot->controller != NULL);
-
-            if (!slot->connected) continue;
-
-            SDL_Joystick* joy = SDL_GameControllerGetJoystick(slot->controller);
-            SDL_JoystickGUID guid = SDL_JoystickGetGUID(joy);
-
-            SDL_JoystickName(joy); // optional name
-
-            SDL_JoystickGetGUIDString(guid, slot->guid, sizeof(slot->guid));
-
-            const char* name = SDL_GameControllerName(slot->controller);
-            if (name) {
-                strncpy(slot->description, name, sizeof(slot->description) - 1);
-                slot->description[sizeof(slot->description) - 1] = '\0';
-            }
+        } else {
+            slot->connected = false;
+            slot->guid[0] = '\0';
         }
 
-        mapSDLToGamepad(slot->controller, slot);
-
-        // edge detection
-        for (int btn = 0; btn < GP_BUTTON_COUNT; btn++) {
-            bool wasDown = slot->buttonDownPrev[btn];
-            if (slot->buttonDown[btn] && !wasDown) slot->buttonPressed[btn] = true;
-            if (!slot->buttonDown[btn] && wasDown) slot->buttonReleased[btn] = true;
+        if (slot->connected) {
+            for (int btn = 0; GP_BUTTON_COUNT > btn; btn++) {
+                bool wasDown = slot->buttonDownPrev[btn];
+                if (slot->buttonDown[btn] && !wasDown) slot->buttonPressed[btn] = true;
+                if (!slot->buttonDown[btn] && wasDown) slot->buttonReleased[btn] = true;
+            }
+            gp->connectedCount++;
         }
-
-        gp->connectedCount++;
-    }
+    }*/
 }
