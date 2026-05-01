@@ -46,8 +46,8 @@ static void gsInit(Renderer* renderer, DataWin* dataWin) {
     // Set alpha blend equation: (Cs - Cd) * As / 128 + Cd (standard src-over blend)
     gsKit_set_primalpha(gs->gsGlobal, GS_SETREG_ALPHA(0, 1, 0, 1, 0), 0);
 
-    printf("GsRendererFlat: initialized (colored quads mode, no textures)\n");
-    printf("GsRendererFlat: %u sprites, %u TPAG items\n", dataWin->sprt.count, dataWin->tpag.count);
+    fprintf(stderr, "GsRendererFlat: initialized (colored quads mode, no textures)\n");
+    fprintf(stderr, "GsRendererFlat: %u sprites, %u TPAG items\n", dataWin->sprt.count, dataWin->tpag.count);
 }
 
 static void gsDestroy(Renderer* renderer) {

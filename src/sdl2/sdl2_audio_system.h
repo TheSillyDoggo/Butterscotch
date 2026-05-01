@@ -2,7 +2,6 @@
 
 #include "common.h"
 #include "audio_system.h"
-#include "miniaudio.h"
 
 #define MAX_SOUND_INSTANCES 128
 #define SOUND_INSTANCE_ID_BASE 100000
@@ -11,11 +10,14 @@
 #define AUDIO_STREAM_INDEX_BASE 300000
 
 typedef struct {
+    void* chunk;
+    int uses;
+} SDLChunk;
+
+typedef struct {
     bool active;
     int32_t soundIndex; // SOND resource that spawned this
     int32_t instanceId; // unique ID returned to GML
-    ma_sound maSound; // miniaudio sound object
-    ma_decoder decoder; // decoder for memory-based audio
     bool ownsDecoder; // true if decoder needs uninit
     float targetGain;
     float currentGain;
@@ -23,20 +25,23 @@ typedef struct {
     float fadeTotalTime;
     float startGain;
     int32_t priority;
+    
+    int channel;
 } SoundInstance;
 
 typedef struct {
     bool active;
     char* filePath; // resolved file path (owned, freed on destroy)
+    void* chunk;
 } AudioStreamEntry;
 
 typedef struct {
     AudioSystem base;
-    ma_engine engine;
     SoundInstance instances[MAX_SOUND_INSTANCES];
     int32_t nextInstanceCounter;
     FileSystem* fileSystem;
     AudioStreamEntry streams[MAX_AUDIO_STREAMS];
-} MaAudioSystem;
+    DataWin* dataWin;
+} SDL2AudioSystem;
 
-MaAudioSystem* MaAudioSystem_create(void);
+SDL2AudioSystem* SDL2AudioSystem_create(void);

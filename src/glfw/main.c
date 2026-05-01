@@ -403,7 +403,7 @@ static void captureScreenshot(const char* filenamePattern, int frameNumber, int 
     stbi_write_png(filename, width, height, 4, lastRow, -stride);
 
     free(pixels);
-    printf("Screenshot saved: %s\n", filename);
+    fprintf(stderr, "Screenshot saved: %s\n", filename);
 }
 
 // ===[ KEYBOARD INPUT ]===
@@ -504,7 +504,7 @@ int main(int argc, char* argv[]) {
     CommandLineArgs args;
     parseCommandLineArgs(&args, argc, argv);
 
-    printf("Loading %s...\n", args.dataWinPath);
+    fprintf(stderr, "Loading %s...\n", args.dataWinPath);
 
     DataWin* dataWin = DataWin_parse(
         args.dataWinPath,
@@ -539,12 +539,12 @@ int main(int argc, char* argv[]) {
     );
 
     Gen8* gen8 = &dataWin->gen8;
-    printf("Loaded \"%s\" (%d) successfully! [Bytecode Version %u / GameMaker version %u.%u.%u.%u]\n", gen8->name, gen8->gameID, gen8->bytecodeVersion, dataWin->detectedFormat.major, dataWin->detectedFormat.minor, dataWin->detectedFormat.release, dataWin->detectedFormat.build);
+    fprintf(stderr, "Loaded \"%s\" (%d) successfully! [Bytecode Version %u / GameMaker version %u.%u.%u.%u]\n", gen8->name, gen8->gameID, gen8->bytecodeVersion, dataWin->detectedFormat.major, dataWin->detectedFormat.minor, dataWin->detectedFormat.release, dataWin->detectedFormat.build);
 
     #ifdef __GLIBC__
     {
         struct mallinfo2 mi = mallinfo2();
-        printf("Memory after data.win parsing: used=%zu bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f);
+        fprintf(stderr, "Memory after data.win parsing: used=%zu bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f);
     }
     #endif
 
@@ -560,7 +560,7 @@ int main(int argc, char* argv[]) {
     if (args.hasSeed) {
         srand((unsigned int) args.seed);
         vm->hasFixedSeed = true;
-        printf("Using fixed RNG seed: %d\n", args.seed);
+        fprintf(stderr, "Using fixed RNG seed: %d\n", args.seed);
     }
 
     if (args.printRooms) {
@@ -573,7 +573,7 @@ int main(int argc, char* argv[]) {
                 loadedHere = true;
             }
 
-            printf("[%d] %s ()\n", idx, room->name);
+            fprintf(stderr, "[%d] %s ()\n", idx, room->name);
 
             forEachIndexed(RoomGameObject, roomGameObject, idx2, room->gameObjects, room->gameObjectCount) {
                 GameObject* gameObject = &dataWin->objt.objects[roomGameObject->objectDefinition];
@@ -602,7 +602,7 @@ int main(int argc, char* argv[]) {
 
     if (args.printDeclaredFunctions) {
         repeat(hmlen(vm->funcMap), i) {
-            printf("[%d] %s\n", vm->funcMap[i].value, vm->funcMap[i].key);
+            fprintf(stderr, "[%d] %s\n", vm->funcMap[i].value, vm->funcMap[i].key);
         }
         VM_free(vm);
         DataWin_free(dataWin);
@@ -821,12 +821,12 @@ int main(int argc, char* argv[]) {
                         fwrite(json, 1, strlen(json), f);
                         fputc('\n', f);
                         fclose(f);
-                        printf("JSON dump saved: %s\n", filename);
+                        fprintf(stderr, "JSON dump saved: %s\n", filename);
                     } else {
                         fprintf(stderr, "Error: Could not write JSON dump to '%s'\n", filename);
                     }
                 } else {
-                    printf("%s\n", json);
+                    fprintf(stderr, "%s\n", json);
                 }
 
                 free(json);
@@ -843,7 +843,7 @@ int main(int argc, char* argv[]) {
                 int32_t interactVarId = shget(runner->vmContext->globalVarNameMap, "interact");
 
                 runner->vmContext->globalVars[interactVarId] = RValue_makeInt32(0);
-                printf("Changed global.interact [%d] value!\n", interactVarId);
+                fprintf(stderr, "Changed global.interact [%d] value!\n", interactVarId);
             }
         }
 
@@ -896,12 +896,12 @@ int main(int argc, char* argv[]) {
                         fwrite(json, 1, strlen(json), f);
                         fputc('\n', f);
                         fclose(f);
-                        printf("JSON dump saved: %s\n", filename);
+                        fprintf(stderr, "JSON dump saved: %s\n", filename);
                     } else {
                         fprintf(stderr, "Error: Could not write JSON dump to '%s'\n", filename);
                     }
                 } else {
-                    printf("%s\n", json);
+                    fprintf(stderr, "%s\n", json);
                 }
                 free(json);
             }
@@ -1033,7 +1033,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (args.exitAtFrame >= 0 && runner->frameCount >= args.exitAtFrame) {
-            printf("Exiting at frame %d (--exit-at-frame)\n", runner->frameCount);
+            fprintf(stderr, "Exiting at frame %d (--exit-at-frame)\n", runner->frameCount);
             glfwSetWindowShouldClose(window, GLFW_TRUE);
         }
 
@@ -1087,6 +1087,6 @@ int main(int argc, char* argv[]) {
 
     freeCommandLineArgs(&args);
 
-    printf("Bye! :3\n");
+    fprintf(stderr, "Bye! :3\n");
     return 0;
 }

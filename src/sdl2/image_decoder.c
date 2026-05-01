@@ -160,7 +160,10 @@ uint8_t* ImageDecoder_decodeToRgba(const uint8_t* blob, size_t blobSize, bool gm
     // PNG (or anything else stbi recognizes).
     int w, h, channels;
     uint8_t* pixels = stbi_load_from_memory(blob, (int) blobSize, &w, &h, &channels, 4);
-    if (!pixels) return nullptr;
+    if (!pixels) {
+        fprintf(stderr, "stb failed: %s\n", stbi_failure_reason());
+        return nullptr;
+    }
     *outW = w;
     *outH = h;
     return pixels;

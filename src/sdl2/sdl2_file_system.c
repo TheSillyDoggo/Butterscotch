@@ -9,7 +9,7 @@
 // ===[ Helpers ]===
 
 // The caller must make sure to free the returned string!
-static char* buildFullPath(Sdl2FileSystem* fs, const char* relativePath) {
+static char* buildFullPath(SDL2FileSystem* fs, const char* relativePath) {
     if (strstr(relativePath, fs->basePath) != nullptr) return safeStrdup(relativePath);
     size_t baseLen = strlen(fs->basePath);
     size_t relLen = strlen(relativePath);
@@ -24,11 +24,11 @@ static char* buildFullPath(Sdl2FileSystem* fs, const char* relativePath) {
 
 // The caller must make sure to free the returned string!
 static char* glfwResolvePath(FileSystem* fs, const char* relativePath) {
-    return buildFullPath((Sdl2FileSystem*) fs, relativePath);
+    return buildFullPath((SDL2FileSystem*) fs, relativePath);
 }
 
 static bool glfwFileExists(FileSystem* fs, const char* relativePath) {
-    char* fullPath = buildFullPath((Sdl2FileSystem*) fs, relativePath);
+    char* fullPath = buildFullPath((SDL2FileSystem*) fs, relativePath);
     struct stat st;
     bool exists = (stat(fullPath, &st) == 0);
     free(fullPath);
@@ -36,7 +36,7 @@ static bool glfwFileExists(FileSystem* fs, const char* relativePath) {
 }
 
 static char* glfwReadFileText(FileSystem* fs, const char* relativePath) {
-    char* fullPath = buildFullPath((Sdl2FileSystem*) fs, relativePath);
+    char* fullPath = buildFullPath((SDL2FileSystem*) fs, relativePath);
     FILE* f = fopen(fullPath, "rb");
     free(fullPath);
     if (f == nullptr)
@@ -54,7 +54,7 @@ static char* glfwReadFileText(FileSystem* fs, const char* relativePath) {
 }
 
 static bool glfwWriteFileText(FileSystem* fs, const char* relativePath, const char* contents) {
-    char* fullPath = buildFullPath((Sdl2FileSystem*) fs, relativePath);
+    char* fullPath = buildFullPath((SDL2FileSystem*) fs, relativePath);
     FILE* f = fopen(fullPath, "wb");
     free(fullPath);
     if (f == nullptr)
@@ -67,14 +67,14 @@ static bool glfwWriteFileText(FileSystem* fs, const char* relativePath, const ch
 }
 
 static bool glfwDeleteFile(FileSystem* fs, const char* relativePath) {
-    char* fullPath = buildFullPath((Sdl2FileSystem*) fs, relativePath);
+    char* fullPath = buildFullPath((SDL2FileSystem*) fs, relativePath);
     int result = remove(fullPath);
     free(fullPath);
     return result == 0;
 }
 
 static bool glfwReadFileBinary(FileSystem* fs, const char* relativePath, uint8_t** outData, int32_t* outSize) {
-    char* fullPath = buildFullPath((Sdl2FileSystem*) fs, relativePath);
+    char* fullPath = buildFullPath((SDL2FileSystem*) fs, relativePath);
     FILE* f = fopen(fullPath, "rb");
     free(fullPath);
     if (f == nullptr)
@@ -94,7 +94,7 @@ static bool glfwReadFileBinary(FileSystem* fs, const char* relativePath, uint8_t
 }
 
 static bool glfwWriteFileBinary(FileSystem* fs, const char* relativePath, const uint8_t* data, int32_t size) {
-    char* fullPath = buildFullPath((Sdl2FileSystem*) fs, relativePath);
+    char* fullPath = buildFullPath((SDL2FileSystem*) fs, relativePath);
     FILE* f = fopen(fullPath, "wb");
     free(fullPath);
     if (f == nullptr)
@@ -107,7 +107,7 @@ static bool glfwWriteFileBinary(FileSystem* fs, const char* relativePath, const 
 
 // ===[ Vtable ]===
 
-static FileSystemVtable Sdl2FileSystemVtable = {
+static FileSystemVtable SDL2FileSystemVtable = {
     .resolvePath = glfwResolvePath,
     .fileExists = glfwFileExists,
     .readFileText = glfwReadFileText,
@@ -119,9 +119,9 @@ static FileSystemVtable Sdl2FileSystemVtable = {
 
 // ===[ Lifecycle ]===
 
-Sdl2FileSystem* Sdl2FileSystem_create(const char* dataWinPath) {
-    Sdl2FileSystem* fs = safeCalloc(1, sizeof(Sdl2FileSystem));
-    fs->base.vtable = &Sdl2FileSystemVtable;
+SDL2FileSystem* SDL2FileSystem_create(const char* dataWinPath) {
+    SDL2FileSystem* fs = safeCalloc(1, sizeof(SDL2FileSystem));
+    fs->base.vtable = &SDL2FileSystemVtable;
 
     // Derive basePath by stripping the filename from dataWinPath
     const char* lastSlash = strrchr(dataWinPath, '/');
@@ -141,7 +141,7 @@ Sdl2FileSystem* Sdl2FileSystem_create(const char* dataWinPath) {
     return fs;
 }
 
-void Sdl2FileSystem_destroy(Sdl2FileSystem* fs) {
+void SDL2FileSystem_destroy(SDL2FileSystem* fs) {
     if (fs == nullptr) return;
     free(fs->basePath);
     free(fs);

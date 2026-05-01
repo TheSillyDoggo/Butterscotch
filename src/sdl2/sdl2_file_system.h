@@ -6,9 +6,9 @@
 typedef struct {
     FileSystem base;
     char* basePath; // directory containing data.win, with trailing separator
-} Sdl2FileSystem;
+} SDL2FileSystem;
 
-// Creates an Sdl2FileSystem from the path to the data.win file
+// Creates an SDL2FileSystem from the path to the data.win file
 // The basePath is derived by stripping the filename from dataWinPath.
-Sdl2FileSystem* Sdl2FileSystem_create(const char* dataWinPath);
-void Sdl2FileSystem_destroy(Sdl2FileSystem* fs);
+SDL2FileSystem* SDL2FileSystem_create(const char* dataWinPath);
+void SDL2FileSystem_destroy(SDL2FileSystem* fs);

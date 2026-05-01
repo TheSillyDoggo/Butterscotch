@@ -2092,9 +2092,9 @@ void Runner_dumpState(Runner* runner) {
     VMContext* vm = runner->vmContext;
     int32_t instanceCount = (int32_t) arrlen(runner->instances);
 
-    printf("=== Frame %d State Dump ===\n", runner->frameCount);
-    printf("Room: %s (index %d)\n", runner->currentRoom->name, runner->currentRoomIndex);
-    printf("Instance count: %d\n", instanceCount);
+    fprintf(stderr, "=== Frame %d State Dump ===\n", runner->frameCount);
+    fprintf(stderr, "Room: %s (index %d)\n", runner->currentRoom->name, runner->currentRoomIndex);
+    fprintf(stderr, "Instance count: %d\n", instanceCount);
 
     repeat(instanceCount, i) {
         Instance* inst = runner->instances[i];
@@ -2117,23 +2117,23 @@ void Runner_dumpState(Runner* runner) {
             parentName = dataWin->objt.objects[gameObject->parentId].name;
         }
 
-        printf("\n--- Instance #%d (%s, objectIndex=%d) ---\n", inst->instanceId, objName, inst->objectIndex);
-        printf("  Position: (%g, %g)\n", (double) inst->x, (double) inst->y);
-        printf("  Depth: %d\n", inst->depth);
-        printf("  Sprite: %s (index %d), imageIndex=%g, imageSpeed=%g\n", spriteName, inst->spriteIndex, (double) inst->imageIndex, (double) inst->imageSpeed);
-        printf("  Scale: (%g, %g), Angle: %g, Alpha: %g, Blend: 0x%06X\n", (double) inst->imageXscale, (double) inst->imageYscale, (double) inst->imageAngle, (double) inst->imageAlpha, inst->imageBlend);
-        printf("  Visible: %s, Active: %s, Solid: %s, Persistent: %s\n", inst->visible ? "true" : "false", inst->active ? "true" : "false", inst->solid ? "true" : "false", inst->persistent ? "true" : "false");
-        printf("  Parent: %s (parentId=%d)\n", parentName, gameObject != nullptr ? gameObject->parentId : -1);
+        fprintf(stderr, "\n--- Instance #%d (%s, objectIndex=%d) ---\n", inst->instanceId, objName, inst->objectIndex);
+        fprintf(stderr, "  Position: (%g, %g)\n", (double) inst->x, (double) inst->y);
+        fprintf(stderr, "  Depth: %d\n", inst->depth);
+        fprintf(stderr, "  Sprite: %s (index %d), imageIndex=%g, imageSpeed=%g\n", spriteName, inst->spriteIndex, (double) inst->imageIndex, (double) inst->imageSpeed);
+        fprintf(stderr, "  Scale: (%g, %g), Angle: %g, Alpha: %g, Blend: 0x%06X\n", (double) inst->imageXscale, (double) inst->imageYscale, (double) inst->imageAngle, (double) inst->imageAlpha, inst->imageBlend);
+        fprintf(stderr, "  Visible: %s, Active: %s, Solid: %s, Persistent: %s\n", inst->visible ? "true" : "false", inst->active ? "true" : "false", inst->solid ? "true" : "false", inst->persistent ? "true" : "false");
+        fprintf(stderr, "  Parent: %s (parentId=%d)\n", parentName, gameObject != nullptr ? gameObject->parentId : -1);
 
         // Active alarms
         bool hasAlarm = false;
         repeat(GML_ALARM_COUNT, alarmIdx) {
             if (inst->alarm[alarmIdx] >= 0) {
-                if (!hasAlarm) { printf("  Alarms:"); hasAlarm = true; }
-                printf(" [%d]=%d", alarmIdx, inst->alarm[alarmIdx]);
+                if (!hasAlarm) { fprintf(stderr, "  Alarms:"); hasAlarm = true; }
+                fprintf(stderr, " [%d]=%d", alarmIdx, inst->alarm[alarmIdx]);
             }
         }
-        if (hasAlarm) printf("\n");
+        if (hasAlarm) fprintf(stderr, "\n");
 
         // Self variables
         bool hasSelfVars = false;
@@ -2153,25 +2153,25 @@ void Runner_dumpState(Runner* runner) {
             }
 
             if (val.type == RVALUE_ARRAY && val.array != nullptr) {
-                if (!hasSelfArrays) { printf("  Self Arrays:\n"); hasSelfArrays = true; }
+                if (!hasSelfArrays) { fprintf(stderr, "  Self Arrays:\n"); hasSelfArrays = true; }
                 repeat(GMLArray_length1D(val.array), ai) {
                     RValue* cell = GMLArray_slot(val.array, ai);
                     if (cell == nullptr || cell->type == RVALUE_UNDEFINED) continue;
                     char* innerStr = RValue_toStringFancy(*cell);
-                    printf("    %s[%d] = %s\n", varName, (int) ai, innerStr);
+                    fprintf(stderr, "    %s[%d] = %s\n", varName, (int) ai, innerStr);
                     free(innerStr);
                 }
             } else {
-                if (!hasSelfVars) { printf("  Self Variables:\n"); hasSelfVars = true; }
+                if (!hasSelfVars) { fprintf(stderr, "  Self Variables:\n"); hasSelfVars = true; }
                 char* valStr = RValue_toStringFancy(val);
-                printf("    %s = %s\n", varName, valStr);
+                fprintf(stderr, "    %s = %s\n", varName, valStr);
                 free(valStr);
             }
         }
     }
 
     // Global variables (non-array)
-    printf("\n=== Global Variables ===\n");
+    fprintf(stderr, "\n=== Global Variables ===\n");
     repeat(dataWin->vari.variableCount, varIdx) {
         Variable* var = &dataWin->vari.variables[varIdx];
         if (var->instanceType != INSTANCE_GLOBAL || var->varID < 0) continue;
@@ -2180,7 +2180,7 @@ void Runner_dumpState(Runner* runner) {
         if (val.type == RVALUE_UNDEFINED) continue;
 
         char* valStr = RValue_toStringFancy(val);
-        printf("  %s = %s\n", var->name, valStr);
+        fprintf(stderr, "  %s = %s\n", var->name, valStr);
         free(valStr);
     }
 
@@ -2195,12 +2195,12 @@ void Runner_dumpState(Runner* runner) {
             RValue* cell = GMLArray_slot(val.array, ai);
             if (cell == nullptr || cell->type == RVALUE_UNDEFINED) continue;
             char* innerStr = RValue_toStringFancy(*cell);
-            printf("  %s[%d] = %s\n", var->name, (int) ai, innerStr);
+            fprintf(stderr, "  %s[%d] = %s\n", var->name, (int) ai, innerStr);
             free(innerStr);
         }
     }
 
-    printf("\n=== End Frame %d State Dump ===\n", runner->frameCount);
+    fprintf(stderr, "\n=== End Frame %d State Dump ===\n", runner->frameCount);
 }
 
 // ===[ JSON State Dump ]===

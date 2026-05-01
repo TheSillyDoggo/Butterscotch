@@ -21,47 +21,55 @@ enum {
     IDX_RT = 7,
 };
 
-/*static void mapGlfwToGml(const GLFWgamepadstate* glfwState, GamepadSlot* slot) {
-    memcpy(slot->buttonDownPrev, slot->buttonDown, sizeof(slot->buttonDown));
-    memset(slot->buttonDown, 0, sizeof(slot->buttonDown));
-    memset(slot->buttonPressed, 0, sizeof(slot->buttonPressed));
-    memset(slot->buttonReleased, 0, sizeof(slot->buttonReleased));
-    memset(slot->buttonValue, 0, sizeof(slot->buttonValue));
-    memset(slot->axisValue, 0, sizeof(slot->axisValue));
+#define GLFW_GAMEPAD_BUTTON_A               0
+#define GLFW_GAMEPAD_BUTTON_B               1
+#define GLFW_GAMEPAD_BUTTON_X               2
+#define GLFW_GAMEPAD_BUTTON_Y               3
+#define GLFW_GAMEPAD_BUTTON_LEFT_BUMPER     4
+#define GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER    5
+#define GLFW_GAMEPAD_BUTTON_BACK            6
+#define GLFW_GAMEPAD_BUTTON_START           7
+#define GLFW_GAMEPAD_BUTTON_GUIDE           8
+#define GLFW_GAMEPAD_BUTTON_LEFT_THUMB      9
+#define GLFW_GAMEPAD_BUTTON_RIGHT_THUMB     10
+#define GLFW_GAMEPAD_BUTTON_DPAD_UP         12
+#define GLFW_GAMEPAD_BUTTON_DPAD_RIGHT      11
+#define GLFW_GAMEPAD_BUTTON_DPAD_DOWN       13
+#define GLFW_GAMEPAD_BUTTON_DPAD_LEFT       14
 
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_A]) slot->buttonDown[0] = true;
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_B]) slot->buttonDown[1] = true;
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_X]) slot->buttonDown[2] = true;
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_Y]) slot->buttonDown[3] = true;
+static void mapSdl2ToGml(const SDL_GameController* sdlState, GamepadSlot* slot) {
+    slot->connected = true;
 
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER]) slot->buttonDown[4] = true;
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER]) slot->buttonDown[5] = true;
+    slot->buttonDown[0] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_A);
+    slot->buttonDown[1] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_B);
+    slot->buttonDown[2] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_X);
+    slot->buttonDown[3] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_Y);
+    
+    slot->buttonDown[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+    slot->buttonDown[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
 
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_BACK]) slot->buttonDown[8] = true;
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_START]) slot->buttonDown[9] = true;
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_GUIDE]) slot->buttonDown[16] = true;
+    slot->buttonDown[GLFW_GAMEPAD_BUTTON_BACK] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_BACK);
+    slot->buttonDown[GLFW_GAMEPAD_BUTTON_START] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_START);
+    slot->buttonDown[GLFW_GAMEPAD_BUTTON_GUIDE] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_GUIDE);
 
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_LEFT_THUMB]) slot->buttonDown[10] = true;
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_RIGHT_THUMB]) slot->buttonDown[11] = true;
+    slot->buttonDown[GLFW_GAMEPAD_BUTTON_DPAD_UP] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_DPAD_UP);
+    slot->buttonDown[GLFW_GAMEPAD_BUTTON_DPAD_DOWN] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+    slot->buttonDown[GLFW_GAMEPAD_BUTTON_DPAD_LEFT] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+    slot->buttonDown[GLFW_GAMEPAD_BUTTON_DPAD_RIGHT] = SDL_GameControllerGetButton(sdlState, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
 
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_DPAD_UP]) slot->buttonDown[12] = true;
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_DPAD_DOWN]) slot->buttonDown[13] = true;
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_DPAD_LEFT]) slot->buttonDown[14] = true;
-    if (glfwState->buttons[GLFW_GAMEPAD_BUTTON_DPAD_RIGHT]) slot->buttonDown[15] = true;
+    float lt = SDL_GameControllerGetAxis(sdlState, SDL_CONTROLLER_AXIS_TRIGGERLEFT);
+    float rt = SDL_GameControllerGetAxis(sdlState, SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
 
-    float lt = glfwState->axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER];
-    float rt = glfwState->axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER];
-    if (lt < 0.0f) lt = 0.0f;
-    if (rt < 0.0f) rt = 0.0f;
+    slot->buttonDown[IDX_LT] = lt > slot->triggerThreshold;
+    slot->buttonDown[IDX_RT] = rt > slot->triggerThreshold;
     slot->buttonValue[IDX_LT] = lt;
     slot->buttonValue[IDX_RT] = rt;
-    if (lt >= slot->triggerThreshold) slot->buttonDown[IDX_LT] = true;
-    if (rt >= slot->triggerThreshold) slot->buttonDown[IDX_RT] = true;
 
-    float lh = glfwState->axes[GLFW_GAMEPAD_AXIS_LEFT_X];
-    float lv = glfwState->axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
-    float rh = glfwState->axes[GLFW_GAMEPAD_AXIS_RIGHT_X];
-    float rv = glfwState->axes[GLFW_GAMEPAD_AXIS_RIGHT_Y];
+
+    float lh = SDL_GameControllerGetAxis(sdlState, SDL_CONTROLLER_AXIS_LEFTX);
+    float lv = SDL_GameControllerGetAxis(sdlState, SDL_CONTROLLER_AXIS_LEFTY);
+    float rh = SDL_GameControllerGetAxis(sdlState, SDL_CONTROLLER_AXIS_RIGHTX);
+    float rv = SDL_GameControllerGetAxis(sdlState, SDL_CONTROLLER_AXIS_RIGHTY);
 
     slot->axisValue[0] = applyDeadzone(lh, slot->deadzone);
     slot->axisValue[1] = applyDeadzone(lv, slot->deadzone);
@@ -72,71 +80,35 @@ enum {
         if (i == IDX_LT || i == IDX_RT) continue;
         slot->buttonValue[i] = slot->buttonDown[i] ? 1.0f : 0.0f;
     }
-}*/
+}
 
 // ===[ Public API ]===
 
-void Sdl2Gamepad_loadMappings(const char* mappings) {
-    /*if (mappings != NULL && mappings[0] != '\0') {
-        if (glfwUpdateGamepadMappings(mappings)) {
+void SDL2Gamepad_loadMappings(const char* mappings) {
+    if (mappings != NULL && mappings[0] != '\0') {
+        if (SDL_GameControllerAddMapping(mappings) != -1) {
             fprintf(stderr, "Gamepad: Loaded SDL gamecontroller mappings successfully\n");
         } else {
             fprintf(stderr, "Gamepad: Failed to load SDL gamecontroller mappings\n");
         }
-    }*/
+    }
 }
 
-void Sdl2Gamepad_poll(RunnerGamepadState* gp) {
-    /*for (int slotIdx = 0; slotIdx < 1 && slotIdx < MAX_GAMEPADS; slotIdx++) {
-        GamepadSlot* slot = &gp->slots[slotIdx];
+void SDL2Gamepad_poll(RunnerGamepadState* gp) {
+    gp->connectedCount = 0;
 
-        bool currentlyConnected = false;
-        int  foundJid = -1;
+    int slot = 0;
+    for (size_t i = 0; i < SDL_NumJoysticks(); i++) {
+        if (SDL_IsGameController(i)) {
+            SDL_GameController* gamepad = SDL_GameControllerOpen(i);
 
-        for (int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_16; jid++) {
-            if (glfwJoystickPresent(jid) && glfwJoystickIsGamepad(jid)) {
-                foundJid = jid;
-                currentlyConnected = true;
-                break;
-            }
-        }
+            if (!gamepad)
+                continue;
 
-        if (currentlyConnected) {
-            GLFWgamepadstate state;
-            if (glfwGetGamepadState(foundJid, &state)) {
-                mapGlfwToGml(&state, slot);
-                slot->jid = foundJid;
-                slot->connected = true;
+            mapSdl2ToGml(gamepad, &gp->slots[slot]);
 
-                const char* name = glfwGetJoystickName(foundJid);
-                if (name != NULL) {
-                    strncpy(slot->description, name, sizeof(slot->description) - 1);
-                    slot->description[sizeof(slot->description) - 1] = '\0';
-                }
-
-                const char* guid = glfwGetJoystickGUID(foundJid);
-                if (guid != NULL) {
-                    strncpy(slot->guid, guid, sizeof(slot->guid) - 1);
-                    slot->guid[sizeof(slot->guid) - 1] = '\0';
-                } else {
-                    slot->guid[0] = '\0';
-                }
-            } else {
-                slot->connected = false;
-                slot->guid[0] = '\0';
-            }
-        } else {
-            slot->connected = false;
-            slot->guid[0] = '\0';
-        }
-
-        if (slot->connected) {
-            for (int btn = 0; GP_BUTTON_COUNT > btn; btn++) {
-                bool wasDown = slot->buttonDownPrev[btn];
-                if (slot->buttonDown[btn] && !wasDown) slot->buttonPressed[btn] = true;
-                if (!slot->buttonDown[btn] && wasDown) slot->buttonReleased[btn] = true;
-            }
             gp->connectedCount++;
+            slot++;
         }
-    }*/
+    }
 }

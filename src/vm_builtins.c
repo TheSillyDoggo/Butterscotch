@@ -1209,7 +1209,7 @@ static RValue builtinShowDebugMessage(MAYBE_UNUSED VMContext* ctx, RValue* args,
     }
 
     char* val = RValue_toString(args[0]);
-    printf("Game: %s\n", val);
+    fprintf(stderr, "Game: %s\n", val);
     free(val);
 
     return RValue_makeUndefined();
@@ -4032,7 +4032,7 @@ static RValue builtinWindowSetCaption(VMContext* ctx, MAYBE_UNUSED RValue* args,
     Runner* runner = (Runner*) ctx->runner;
     if (runner->setWindowTitle && runner->nativeWindow) {
         runner->setWindowTitle(runner->nativeWindow, windowTitle);
-        printf("GL: Window title set to: %s\n", val);
+        fprintf(stderr, "GL: Window title set to: %s\n", val);
     }
     
     free(val);

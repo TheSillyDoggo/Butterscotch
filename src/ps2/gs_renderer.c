@@ -330,13 +330,13 @@ static void evictAtlas(GsRenderer* gs, int16_t atlasId) {
     }
 
     uint32_t availableChunks = countFreeChunks(gs);
-    rendererPrintf("GsRenderer: Evicted atlas %d from VRAM (available chunks = %d)\n", atlasId, availableChunks);
+    rendererfprintf(stderr, "GsRenderer: Evicted atlas %d from VRAM (available chunks = %d)\n", atlasId, availableChunks);
 }
 
 // Defragment the texture cache by evicting all loaded atlases.
 // They will be reloaded on-demand as needed during subsequent draw calls.
 static void defragTextureCache(GsRenderer* gs) {
-    rendererPrintf("GsRenderer: Defragmenting VRAM texture cache...\n");
+    rendererfprintf(stderr, "GsRenderer: Defragmenting VRAM texture cache...\n");
 
     forEach(VRAMChunk, chunk, gs->chunks, gs->chunkCount) {
         chunk->atlasId = -1;
@@ -347,7 +347,7 @@ static void defragTextureCache(GsRenderer* gs) {
         gs->atlasToChunk[i] = -1;
     }
 
-    rendererPrintf("GsRenderer: Defrag complete - all %u chunks freed\n", gs->chunkCount);
+    rendererfprintf(stderr, "GsRenderer: Defrag complete - all %u chunks freed\n", gs->chunkCount);
 }
 
 // Allocate consecutive chunks for an atlas. Evicts LRU victims or defrags if needed.
@@ -368,7 +368,7 @@ static int32_t allocateChunks(GsRenderer* gs, int chunksNeeded) {
         // We only need to flush if the victim was used on this frame
         // If it wasn't, then we can evict with no care in the world
         if (wasUsedOnThisFrame) {
-            rendererPrintf("GsRenderer: Flushing draw queue before VRAM evicting because atlas was used on the current frame\n");
+            rendererfprintf(stderr, "GsRenderer: Flushing draw queue before VRAM evicting because atlas was used on the current frame\n");
             gs->evictedAtlasUsedInCurrentFrame = true;
             gsKit_queue_exec(gs->gsGlobal);
         }
@@ -383,7 +383,7 @@ static int32_t allocateChunks(GsRenderer* gs, int chunksNeeded) {
 
     // At this point we are lost, just flush and hope for the best
     gs->evictedAtlasUsedInCurrentFrame = true;
-    rendererPrintf("GsRenderer: Flushing draw queue before VRAM defrag\n");
+    rendererfprintf(stderr, "GsRenderer: Flushing draw queue before VRAM defrag\n");
     gsKit_queue_exec(gs->gsGlobal);
 
     // Attempt 3: defrag - evict ALL and let them reload on demand
@@ -600,7 +600,7 @@ static void eeCacheInsert(GsRenderer* gs, uint16_t atlasId, const uint8_t* data,
 
     if (gs->eeCacheBumpPtr + size > gs->eeCacheCapacity) {
         if (!eeCacheEvictLRU(gs, size)) {
-            rendererPrintf("GsRenderer: EE cache eviction failed for atlas %u (%u bytes)\n", atlasId, size);
+            rendererfprintf(stderr, "GsRenderer: EE cache eviction failed for atlas %u (%u bytes)\n", atlasId, size);
             return;
         }
     }
@@ -653,7 +653,7 @@ static void uploadAtlasToChunk(GsRenderer* gs, uint16_t atlasId, int32_t firstCh
             tempPixelData = nullptr;
         } else {
             // EE cache insert failed, upload directly from temp buffer
-            rendererPrintf("GsRenderer: EE cache insert failed for atlas %u, uploading directly\n", atlasId);
+            rendererfprintf(stderr, "GsRenderer: EE cache insert failed for atlas %u, uploading directly\n", atlasId);
             uploadData = tempPixelData;
         }
     }
@@ -674,7 +674,7 @@ static void uploadAtlasToChunk(GsRenderer* gs, uint16_t atlasId, int32_t firstCh
     }
     gs->atlasToChunk[atlasId] = (int16_t) firstChunk;
 
-    rendererPrintf("GsRenderer: Atlas %u uploaded to chunk %d (VRAM 0x%08X, %ubpp, src: %s)\n", atlasId, firstChunk, vramAddr, bpp, atlasSource);
+    rendererfprintf(stderr, "GsRenderer: Atlas %u uploaded to chunk %d (VRAM 0x%08X, %ubpp, src: %s)\n", atlasId, firstChunk, vramAddr, bpp, atlasSource);
 
     free(tempPixelData);
 }
@@ -1603,7 +1603,7 @@ static void gsFlush(MAYBE_UNUSED Renderer* renderer) {
 }
 
 static int32_t gsCreateSpriteFromSurface(MAYBE_UNUSED Renderer* renderer, MAYBE_UNUSED int32_t x, MAYBE_UNUSED int32_t y, MAYBE_UNUSED int32_t w, MAYBE_UNUSED int32_t h, MAYBE_UNUSED bool removeback, MAYBE_UNUSED bool smooth, MAYBE_UNUSED int32_t xorig, MAYBE_UNUSED int32_t yorig) {
-    rendererPrintf("GsRenderer: createSpriteFromSurface not supported on PS2\n");
+    rendererfprintf(stderr, "GsRenderer: createSpriteFromSurface not supported on PS2\n");
     return -1;
 }
 

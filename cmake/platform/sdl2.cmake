@@ -23,8 +23,8 @@ if(ENABLE_VM_STUB_LOGS)
 endif()
 
 # GLAD
-add_library(glad STATIC vendor/glad/src/glad.c)
-target_include_directories(glad PUBLIC vendor/glad/include)
+#add_library(glad STATIC vendor/glad/src/glad.c)
+#target_include_directories(glad PUBLIC vendor/glad/include)
 
 # stb_image
 target_include_directories(butterscotch PUBLIC vendor/stb/image)
@@ -33,7 +33,7 @@ target_include_directories(butterscotch PUBLIC vendor/stb/image)
 target_include_directories(butterscotch PUBLIC vendor/stb/vorbis)
 
 # miniaudio
-target_include_directories(butterscotch PUBLIC vendor/miniaudio)
+
 
 if(MINGW)
     find_package(SDL2 REQUIRED)
@@ -53,9 +53,10 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Haiku")
 else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(SDL2 REQUIRED sdl2)
-    target_include_directories(butterscotch PRIVATE ${SDL2_INCLUDE_DIRS})
-    target_link_directories(butterscotch PRIVATE ${SDL2_LIBRARY_DIRS})
-    target_link_libraries(butterscotch ${SDL2_LIBRARIES} glad m pthread dl bz2)
+    pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
+    target_include_directories(butterscotch PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS})
+    target_link_directories(butterscotch PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_MIXER_LIBRARY_DIRS})
+    target_link_libraries(butterscotch ${SDL2_LIBRARIES} ${SDL2_MIXER_LIBRARIES} m pthread bz2)
 endif()
 
 # Enable AddressSanitizer by default in Debug builds

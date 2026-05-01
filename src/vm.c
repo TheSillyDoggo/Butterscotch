@@ -3547,17 +3547,17 @@ void VM_disassemble(VMContext* ctx, int32_t codeIndex) {
     CodeEntry* code = &dw->code.entries[codeIndex];
 
     // Header
-    printf("=== %s (length=%u, locals=%u, args=%u) ===\n", code->name, code->length, code->localsCount, code->argumentsCount);
+    fprintf(stderr, "=== %s (length=%u, locals=%u, args=%u) ===\n", code->name, code->length, code->localsCount, code->argumentsCount);
 
     // CodeLocals
     CodeLocals* locals = resolveCodeLocals(ctx, code->name);
     if (locals != nullptr && locals->localVarCount > 0) {
-        printf("Locals:");
+        fprintf(stderr, "Locals:");
         repeat(locals->localVarCount, i) {
-            if (i > 0) printf(",");
-            printf(" [%u] %s", locals->locals[i].varID, locals->locals[i].name);
+            if (i > 0) fprintf(stderr, ",");
+            fprintf(stderr, " [%u] %s", locals->locals[i].varID, locals->locals[i].name);
         }
-        printf("\n");
+        fprintf(stderr, "\n");
     }
 
     // Cross-references
@@ -3565,16 +3565,16 @@ void VM_disassemble(VMContext* ctx, int32_t codeIndex) {
         ptrdiff_t mapIdx = hmgeti(ctx->crossRefMap, codeIndex);
         if (mapIdx >= 0) {
             int32_t* callers = ctx->crossRefMap[mapIdx].value;
-            printf("Called by:");
+            fprintf(stderr, "Called by:");
             for (ptrdiff_t i = 0; arrlen(callers) > i; i++) {
-                if (i > 0) printf(",");
-                printf(" %s", dw->code.entries[callers[i]].name);
+                if (i > 0) fprintf(stderr, ",");
+                fprintf(stderr, " %s", dw->code.entries[callers[i]].name);
             }
-            printf("\n");
+            fprintf(stderr, "\n");
         }
     }
 
-    printf("\n");
+    fprintf(stderr, "\n");
 
     const uint8_t* bytecodeBase = dw->bytecodeBuffer + (code->bytecodeAbsoluteOffset - dw->bytecodeBufferBase);
     uint32_t codeLength = code->length;
@@ -3626,7 +3626,7 @@ void VM_disassemble(VMContext* ctx, int32_t codeIndex) {
 
         // Print label if this address is a branch target
         if (hmgeti(branchTargets, instrAddr) >= 0) {
-            printf("  %04X: L_%04X:\n", instrAddr, instrAddr);
+            fprintf(stderr, "  %04X: L_%04X:\n", instrAddr, instrAddr);
         }
 
         int32_t indent = 2 + envDepth * 4;
@@ -3638,9 +3638,9 @@ void VM_disassemble(VMContext* ctx, int32_t codeIndex) {
 
         // Print the formatted line
         if (commentStr[0] != '\0') {
-            printf("%*s%04X: [0x%08X] %-16s %-45s %s\n", indent, "", instrAddr, instr, opcodeStr, operandStr, commentStr);
+            fprintf(stderr, "%*s%04X: [0x%08X] %-16s %-45s %s\n", indent, "", instrAddr, instr, opcodeStr, operandStr, commentStr);
         } else {
-            printf("%*s%04X: [0x%08X] %-16s %s\n", indent, "", instrAddr, instr, opcodeStr, operandStr);
+            fprintf(stderr, "%*s%04X: [0x%08X] %-16s %s\n", indent, "", instrAddr, instr, opcodeStr, operandStr);
         }
 
         // PushEnv increases depth after printing
@@ -3648,7 +3648,7 @@ void VM_disassemble(VMContext* ctx, int32_t codeIndex) {
     }
 
     hmfree(branchTargets);
-    printf("\n");
+    fprintf(stderr, "\n");
 }
 
 void VM_registerBuiltin(VMContext* ctx, const char* name, BuiltinFunc func) {

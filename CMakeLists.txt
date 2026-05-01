@@ -50,3 +50,14 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/platform/${PLATFORM}.cmake")
 else()
     message(FATAL_ERROR "Unknown platform! ${PLATFORM}")
 endif()
+
+if(PSP)
+    create_pbp_file(
+        TARGET ${PROJECT_NAME}
+        ICON_PATH NULL
+        BACKGROUND_PATH NULL
+        PREVIEW_PATH NULL
+        TITLE ${PROJECT_NAME}
+        VERSION 01.00
+    )
+endif()

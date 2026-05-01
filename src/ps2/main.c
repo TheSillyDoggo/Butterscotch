@@ -93,7 +93,7 @@ static void parsePadMappings(JsonValue* configRoot, const char* key, PadMapping*
         JsonValue* gmlKeyVal = JsonReader_getObjectValue(mappingsObj, i);
         mappings[i].padButton = (uint16_t) atoi(padButtonStr);
         mappings[i].gmlKey = (int32_t) JsonReader_getInt(gmlKeyVal);
-        printf("CONFIG.JSN: %s mapping pad=%d -> gmlKey=%d\n", logLabel, mappings[i].padButton, mappings[i].gmlKey);
+        fprintf(stderr, "CONFIG.JSN: %s mapping pad=%d -> gmlKey=%d\n", logLabel, mappings[i].padButton, mappings[i].gmlKey);
     }
     *outMappings = mappings;
     *outCount = count;
@@ -429,7 +429,7 @@ int main(int argc, char* argv[]) {
 
     const char* dataWinPath = PS2Utils_createDevicePath("DATA.WIN");
 
-    printf("Butterscotch PS2 - Loading %s\n", dataWinPath);
+    fprintf(stderr, "Butterscotch PS2 - Loading %s\n", dataWinPath);
 
     // ===[ Initialize gsKit ]===
     // This must happen first so we can show the loading screen during other init steps
@@ -464,51 +464,51 @@ int main(int argc, char* argv[]) {
     int ret;
     ret = SifExecModuleBuffer(freesio2_irx, size_freesio2_irx, 0, nullptr, nullptr);
     if (0 > ret) {
-        printf("Failed to load freesio2: %d\n", ret);
+        fprintf(stderr, "Failed to load freesio2: %d\n", ret);
         return 1;
     }
     ret = SifExecModuleBuffer(mcman_irx, size_mcman_irx, 0, nullptr, nullptr);
     if (0 > ret) {
-        printf("Failed to load mcman: %d\n", ret);
+        fprintf(stderr, "Failed to load mcman: %d\n", ret);
         return 1;
     }
     ret = SifExecModuleBuffer(mcserv_irx, size_mcserv_irx, 0, nullptr, nullptr);
     if (0 > ret) {
-        printf("Failed to load mcserv: %d\n", ret);
+        fprintf(stderr, "Failed to load mcserv: %d\n", ret);
         return 1;
     }
     ret = mcInit(MC_TYPE_MC);
     if (0 > ret) {
-        printf("Failed to init libmc: %d\n", ret);
+        fprintf(stderr, "Failed to init libmc: %d\n", ret);
         return 1;
     }
     ret = SifExecModuleBuffer(freepad_irx, size_freepad_irx, 0, nullptr, nullptr);
     if (0 > ret) {
-        printf("Failed to load freepad: %d\n", ret);
+        fprintf(stderr, "Failed to load freepad: %d\n", ret);
         return 1;
     }
 
     padInit(0);
     padOpened[0] = (padPortOpen(0, 0, padBuf[0]) != 0);
     padOpened[1] = (padPortOpen(1, 0, padBuf[1]) != 0);
-    if (!padOpened[0]) printf("Warning: failed to open pad port 0\n");
-    if (!padOpened[1]) printf("Warning: failed to open pad port 1\n");
+    if (!padOpened[0]) fprintf(stderr, "Warning: failed to open pad port 0\n");
+    if (!padOpened[1]) fprintf(stderr, "Warning: failed to open pad port 1\n");
 
     // ===[ Load USB Keyboard IOP Modules ]===
     int usbdRet = SifExecModuleBuffer(usbd_irx, size_usbd_irx, 0, nullptr, nullptr);
     if (0 > usbdRet) {
-        printf("Warning: failed to load usbd: %d (keyboard disabled)\n", usbdRet);
+        fprintf(stderr, "Warning: failed to load usbd: %d (keyboard disabled)\n", usbdRet);
     } else {
         int kbdRet = SifExecModuleBuffer(ps2kbd_irx, size_ps2kbd_irx, 0, nullptr, nullptr);
         if (0 > kbdRet) {
-            printf("Warning: failed to load ps2kbd: %d (keyboard disabled)\n", kbdRet);
+            fprintf(stderr, "Warning: failed to load ps2kbd: %d (keyboard disabled)\n", kbdRet);
         } else if (PS2KbdInit() == 0) {
-            printf("Warning: PS2KbdInit failed (keyboard disabled)\n");
+            fprintf(stderr, "Warning: PS2KbdInit failed (keyboard disabled)\n");
         } else {
             PS2KbdSetReadmode(PS2KBD_READMODE_RAW);
             PS2KbdSetBlockingMode(PS2KBD_NONBLOCKING);
             kbdAvailable = true;
-            printf("USB keyboard initialized\n");
+            fprintf(stderr, "USB keyboard initialized\n");
         }
     }
 
@@ -516,11 +516,11 @@ int main(int argc, char* argv[]) {
     // ===[ Load Audio IOP Modules ]===
     ret = SifExecModuleBuffer(freesd_irx, size_freesd_irx, 0, nullptr, nullptr);
     if (0 > ret) {
-        printf("Failed to load freesd: %d\n", ret);
+        fprintf(stderr, "Failed to load freesd: %d\n", ret);
     }
     ret = SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, nullptr, nullptr);
     if (0 > ret) {
-        printf("Failed to load audsrv: %d\n", ret);
+        fprintf(stderr, "Failed to load audsrv: %d\n", ret);
     }
 #endif
 
@@ -532,7 +532,7 @@ int main(int argc, char* argv[]) {
         padState = padGetState(0, 0);
     } while (PAD_STATE_STABLE != padState && PAD_STATE_FINDCTP1 != padState);
 
-    printf("Controller initialized\n");
+    fprintf(stderr, "Controller initialized\n");
 
     // ===[ Loading Screen State ]===
     LoadingScreenState loadingState = {
@@ -634,7 +634,7 @@ int main(int argc, char* argv[]) {
         void* heapTop = sbrk(0);
         int32_t usedBytes = (int32_t) (uintptr_t) heapTop;
         int32_t freeBytes = MAX_MEMORY_BYTES - usedBytes;
-        printf("Memory after data.win parsing: used=%d bytes (%.1f KB), total=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", usedBytes, (double) (usedBytes / 1024.0f), MAX_MEMORY_BYTES, (double) (MAX_MEMORY_BYTES / 1024.0f), freeBytes, (double) (freeBytes / 1024.0f));
+        fprintf(stderr, "Memory after data.win parsing: used=%d bytes (%.1f KB), total=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", usedBytes, (double) (usedBytes / 1024.0f), MAX_MEMORY_BYTES, (double) (MAX_MEMORY_BYTES / 1024.0f), freeBytes, (double) (freeBytes / 1024.0f));
     }
 
     FileSystem* fileSystem = Ps2FileSystem_create(configRoot, dataWin->gen8.displayName);
@@ -675,7 +675,7 @@ int main(int argc, char* argv[]) {
             if (elem != nullptr && JsonReader_isString(elem)) {
                 const char* objName = JsonReader_getString(elem);
                 shput(runner->disabledObjects, objName, 1);
-                printf("Disabled object: %s\n", objName);
+                fprintf(stderr, "Disabled object: %s\n", objName);
             }
         }
     }
@@ -688,7 +688,7 @@ int main(int argc, char* argv[]) {
         void* heapTop = sbrk(0);
         int32_t usedBytes = (int32_t) (uintptr_t) heapTop;
         int32_t freeBytes = MAX_MEMORY_BYTES - usedBytes;
-        printf("Memory after VM and runner creation: used=%d bytes (%.1f KB), total=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", usedBytes, (double) (usedBytes / 1024.0f), MAX_MEMORY_BYTES, (double) (MAX_MEMORY_BYTES / 1024.0f), freeBytes, (double) (freeBytes / 1024.0f));
+        fprintf(stderr, "Memory after VM and runner creation: used=%d bytes (%.1f KB), total=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", usedBytes, (double) (usedBytes / 1024.0f), MAX_MEMORY_BYTES, (double) (MAX_MEMORY_BYTES / 1024.0f), freeBytes, (double) (freeBytes / 1024.0f));
     }
 
     drawStatusScreen(gsGlobal, gsFontM, dataWin->gen8.displayName, "Initializing first room...", &loadingState);
@@ -796,7 +796,7 @@ int main(int argc, char* argv[]) {
             int32_t interactVarId = shget(runner->vmContext->globalVarNameMap, "interact");
 
             runner->vmContext->globalVars[interactVarId] = RValue_makeInt32(0);
-            printf("Changed global.interact [%d] value!\n", interactVarId);
+            fprintf(stderr, "Changed global.interact [%d] value!\n", interactVarId);
         }
 
         // ===[ Game Logic ]===

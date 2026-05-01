@@ -1996,7 +1996,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         } else if (options.parseAudo && memcmp(chunkName, "AUDO", 4) == 0) {
             parseAUDO(&reader, dw);
         } else {
-            printf("Unknown chunk: %.4s (length %u at offset 0x%zX)\n", chunkName, chunkLength, chunkDataStart - 8);
+            fprintf(stderr, "Unknown chunk: %.4s (length %u at offset 0x%zX)\n", chunkName, chunkLength, chunkDataStart - 8);
         }
 
         // Free the chunk buffer and revert to FILE*-based reads for the next header
